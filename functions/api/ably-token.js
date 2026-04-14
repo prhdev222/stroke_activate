@@ -37,33 +37,32 @@ export async function onRequest(context) {
     return respond(401, { error: 'Invalid shift code' });
   }
 
-  // ── Issue Ably token ─────────────────────────────────────────────
+  // ── Issue Ably TokenRequest (signed) ─────────────────────────────
+  // สำหรับ Ably JS SDK (authUrl) แนวทางที่เสถียรคือให้ server สร้าง TokenRequest + mac
+  // แล้ว SDK จะนำไปแลก token เอง (ไม่ต้องเรียก requestToken REST จาก server)
   const apiKey  = env.ABLY_API_KEY;
   if (!apiKey) return respond(500, { error: 'ABLY_API_KEY not configured' });
 
-  const [keyName] = apiKey.split(':');
-  const res = await fetch(`https://rest.ably.io/keys/${keyName}/requestToken`, {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Basic ' + btoa(apiKey),
-      'Content-Type': 'application/json',
-      // ช่วยให้ behavior เสถียรขึ้นตามเวอร์ชัน API ของ Ably
-      'X-Ably-Version': '2.0',
-    },
-    body: JSON.stringify({
-      // Ably รับ capability ได้ทั้ง string และ object แต่บาง runtime/edge case จะ strict
-      // เลยส่งเป็น JSON string ให้ชัวร์
-      capability: JSON.stringify({ 'stroke-fast-track': ['publish', 'subscribe'] }),
-      // ให้ Ably ออก token ผูกกับ clientId ที่หน้าเว็บส่งมา (เช่น ER/Ward/LAB/CT)
-      ...(clientId ? { clientId } : {}),
-      // บางครั้ง Ably จะ validate token request body แบบ strict และคาดหวัง timestamp เป็น number/string
-      timestamp: Date.now(),
-      ttl: 3600000,   // 1 ชั่วโมง — SDK renew อัตโนมัติ
-    }),
-  });
+  const [keyName, keySecret] = apiKey.split(':');
+  if (!keyName || !keySecret) return respond(500, { error: 'ABLY_API_KEY invalid format' });
 
-  const token = await res.json();
-  return respond(res.status, token);
+  const ttl = 3_600_000; // 1 ชั่วโมง
+  const capabilityObj = { 'stroke-fast-track': ['publish', 'subscribe'] };
+  const capability = canonicalCapability(capabilityObj);
+  const timestamp = Date.now(); // ms since epoch (number)
+  const nonce = randomNonce(24);
+
+  const tokenRequest = {
+    keyName,
+    ttl,
+    capability,
+    clientId: clientId || undefined,
+    timestamp,
+    nonce,
+  };
+
+  const mac = await signTokenRequestMac(tokenRequest, keySecret);
+  return respond(200, { ...tokenRequest, mac });
 }
 
 function respond(status, body) {
@@ -74,4 +73,59 @@ function respond(status, body) {
       'Cache-Control': 'no-store',
     },
   });
+}
+
+function canonicalCapability(obj) {
+  // สเปก Ably แนะนำให้ capability เป็น JSON string ที่ deterministic (เรียง key/values)
+  // เพื่อให้ sign แล้วฝั่ง Ably ตรวจได้ตรงกัน
+  const sorted = {};
+  for (const channel of Object.keys(obj).sort()) {
+    const ops = Array.isArray(obj[channel]) ? obj[channel].slice().sort() : [];
+    sorted[channel] = ops;
+  }
+  return JSON.stringify(sorted);
+}
+
+function randomNonce(length) {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  // base64url-ish แบบง่าย (A-Z a-z 0-9) เพื่อให้เป็น string ปลอดภัย
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) out += chars[bytes[i] % chars.length];
+  return out;
+}
+
+async function signTokenRequestMac(tokenRequest, keySecret) {
+  // TokenRequest canonical string (Ably spec):
+  // keyName\nttl\ncapability\nclientId\ntimestamp\nnonce\n
+  const canonical =
+    String(tokenRequest.keyName ?? '') + '\n' +
+    String(tokenRequest.ttl ?? '') + '\n' +
+    String(tokenRequest.capability ?? '') + '\n' +
+    String(tokenRequest.clientId ?? '') + '\n' +
+    String(tokenRequest.timestamp ?? '') + '\n' +
+    String(tokenRequest.nonce ?? '') + '\n';
+
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(keySecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(canonical));
+  return base64FromArrayBuffer(sig);
+}
+
+function base64FromArrayBuffer(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  // chunk เพื่อไม่ให้ stack/arg ยาวเกิน
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
 }
