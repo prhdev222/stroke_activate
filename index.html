@@ -375,6 +375,12 @@ function connectAbly(){
 
     const def = ACTIONS[d.action];
     if(def){
+      if(d.action === 'activate' && !startTs && typeof d.startTs === 'number'){
+        startTs = d.startTs;
+        document.getElementById('btn-act').disabled = true;
+        enableButtonsForLoc(appLoc);
+        ticker = setInterval(tick, 500);
+      }
       window[def.playFn]();
       speak(def.speech, 400);
       addLog('remote', def.icon, `${def.label}`, d.delta, from);
@@ -408,11 +414,28 @@ function setConn(state, label){
 let startTs=null, ticker=null, appLoc='ER', shiftCode='';
 let mHit={20:false,30:false,45:false,60:false};
 
+function enableButtonsForLoc(loc){
+  const all = ['btn-ct','btn-lab','btn-ct-result','btn-lab-result','btn-admit','btn-refer'];
+  const enableMap = {
+    ER:   all,
+    Ward: all,
+    LAB:  ['btn-lab','btn-lab-result'],
+    CT:   ['btn-ct','btn-ct-result'],
+  };
+  const enabled = new Set(enableMap[loc] || all);
+  all.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.disabled = !enabled.has(id);
+  });
+}
+
 function setLoc(btn,loc){
   appLoc=loc;
   document.querySelectorAll('.loc-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if(ablyClient) ablyClient.auth.clientId=loc;
+  if(startTs) enableButtonsForLoc(loc);
 }
 
 function pad(n){return String(n).padStart(2,'0');}
@@ -427,12 +450,11 @@ function activate(){
   if(startTs) return;
   startTs=Date.now();
   document.getElementById('btn-act').disabled=true;
-  ['btn-ct','btn-lab','btn-ct-result','btn-lab-result','btn-admit','btn-refer']
-    .forEach(id=>document.getElementById(id).disabled=false);
+  enableButtonsForLoc(appLoc);
   playActivate();
   speak(`Stroke Fast Track activated at ${appLoc}.`,700);
   addLog('activate','🚨',`Activate — ${appLoc}`,null,null);
-  publish('activate');
+  publish('activate', { startTs });
   ticker=setInterval(tick,500);
 }
 
@@ -440,6 +462,10 @@ function activate(){
 function doAction(action){
   const def=ACTIONS[action];
   if(!def) return;
+  if(!startTs){
+    addLog('alert','⚠️','ยังไม่มีเคสที่ถูก Activate',null,null);
+    return;
+  }
   const delta=Date.now()-startTs;
 
   if(def.btnId){ document.getElementById(def.btnId).classList.add('stamped'); }

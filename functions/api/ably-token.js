@@ -43,7 +43,24 @@ export async function onRequest(context) {
   const apiKey  = env.ABLY_API_KEY;
   if (!apiKey) return respond(500, { error: 'ABLY_API_KEY not configured' });
 
-  const [keyName, keySecret] = apiKey.split(':');
+  // debug เฉพาะตอน dev (ไม่ได้ตั้ง ALLOWED_ORIGIN) เพื่อไม่ให้ leak ค่า secret ใน production
+  if (!allowed && url.searchParams.get('debug') === '1') {
+    const s = String(apiKey);
+    return respond(200, {
+      debug: {
+        typeof: typeof apiKey,
+        length: s.length,
+        hasColon: s.includes(':'),
+        prefix: s.slice(0, 8),
+        suffix: s.slice(-6),
+      },
+    });
+  }
+
+  const apiKeyTrimmed = String(apiKey).trim();
+  const colonIdx = apiKeyTrimmed.indexOf(':');
+  const keyName = colonIdx >= 0 ? apiKeyTrimmed.slice(0, colonIdx) : '';
+  const keySecret = colonIdx >= 0 ? apiKeyTrimmed.slice(colonIdx + 1) : '';
   if (!keyName || !keySecret) return respond(500, { error: 'ABLY_API_KEY invalid format' });
 
   const ttl = 3_600_000; // 1 ชั่วโมง
