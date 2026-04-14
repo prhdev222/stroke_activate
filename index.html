@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
+<title>Stroke Fast Track Timer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
+<style>
+:root{
+  --red:#e53935;--red-glow:rgba(229,57,53,.35);
+  --amber:#ffb300;--green:#00c853;
+  --bg:#0a0a0f;--card:#13131a;--border:#1e1e2e;
+  --text:#f0f0f8;--muted:#7070a0;--r:14px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{background:var(--bg);color:var(--text);font-family:'Sarabun',system-ui,sans-serif;}
+body{display:flex;flex-direction:column;align-items:center;
+     padding:16px 12px 40px;gap:14px;min-height:100vh;}
+
+/* overlay */
+.overlay{position:fixed;inset:0;background:rgba(10,10,15,.97);z-index:999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;}
+.overlay h2{font-size:20px;color:#fff;text-align:center;}
+.overlay p{font-size:13px;color:var(--muted);text-align:center;max-width:300px;line-height:1.6;}
+.overlay input{width:100%;max-width:340px;background:#1a1a2a;border:1px solid #2a2a4a;
+  border-radius:10px;padding:12px 14px;color:#fff;font-family:'JetBrains Mono',monospace;
+  font-size:13px;letter-spacing:.5px;}
+.overlay input:focus{outline:2px solid var(--red);border-color:var(--red);}
+.overlay small{font-size:12px;color:var(--muted);}
+.overlay small a{color:#7090ff;text-decoration:none;}
+.btn-unlock{padding:16px 40px;background:var(--red);border:none;border-radius:12px;
+  color:#fff;font-family:inherit;font-size:18px;font-weight:700;cursor:pointer;
+  animation:pb 1.6s ease-in-out infinite;width:100%;max-width:340px;}
+@keyframes pb{0%,100%{box-shadow:0 0 0 0 var(--red-glow)}50%{box-shadow:0 0 0 14px transparent}}
+
+/* connection badge */
+.conn-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:#555;flex-shrink:0;transition:background .3s;}
+.conn-dot.online{background:var(--green);}
+.conn-dot.error{background:var(--red);}
+
+.header{width:100%;max-width:480px;text-align:center;padding-top:4px;}
+.header h1{font-size:20px;font-weight:700;color:#fff;
+  display:flex;align-items:center;justify-content:center;gap:8px;}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--red);
+  display:inline-block;animation:hb 1.4s ease-in-out infinite;}
+@keyframes hb{0%,100%{transform:scale(1)}50%{transform:scale(1.4);opacity:.6}}
+
+.card{width:100%;max-width:480px;background:var(--card);
+  border:1px solid var(--border);border-radius:var(--r);padding:18px;}
+
+.loc-row{display:flex;gap:10px;margin-bottom:14px;}
+.loc-btn{flex:1;padding:11px;border:2px solid var(--border);border-radius:10px;
+  background:transparent;color:var(--muted);font-family:inherit;font-size:15px;
+  font-weight:600;cursor:pointer;transition:all .2s;}
+.loc-btn.active{border-color:var(--red);background:rgba(229,57,53,.12);color:#fff;}
+
+.ctrl-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.vol-wrap{display:flex;align-items:center;gap:6px;flex:1;font-size:13px;color:var(--muted);}
+.vol-wrap input{flex:1;accent-color:var(--red);}
+.btn-sm{background:transparent;border:1px solid #2a2a3a;color:var(--muted);
+  font-family:inherit;font-size:13px;padding:7px 14px;border-radius:8px;cursor:pointer;transition:all .2s;}
+.btn-sm:hover{border-color:#4a4a6a;color:var(--text);}
+
+.btn-activate{width:100%;padding:17px;border:none;border-radius:12px;
+  font-family:inherit;font-size:18px;font-weight:700;cursor:pointer;
+  background:var(--red);color:#fff;transition:transform .15s,box-shadow .15s;}
+.btn-activate:hover{box-shadow:0 0 0 8px var(--red-glow);}
+.btn-activate:active{transform:scale(.97);}
+.btn-activate:disabled{background:#3a1a1a;color:#7a4040;cursor:not-allowed;box-shadow:none;}
+
+.timer-wrap{text-align:center;padding:14px 0 8px;}
+.timer{font-family:'JetBrains Mono',monospace;font-size:72px;font-weight:700;
+  color:#fff;line-height:1;letter-spacing:-2px;transition:color .4s;}
+.timer.warn{color:var(--amber);}
+.timer.crit{color:var(--red);text-shadow:0 0 28px var(--red-glow);}
+.timer-label{font-size:12px;color:var(--muted);letter-spacing:.08em;margin-top:6px;}
+
+.milestones{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:12px;}
+.badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;
+  background:#1a1a2a;color:var(--muted);border:1px solid #2a2a3a;transition:all .4s;}
+.badge.hit{background:rgba(255,179,0,.15);color:var(--amber);border-color:var(--amber);}
+.badge.crit{background:rgba(229,57,53,.15);color:var(--red);border-color:var(--red);}
+
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+.action-btn{padding:15px 10px;border:2px solid var(--border);border-radius:12px;
+  background:transparent;color:var(--text);font-family:inherit;font-size:14px;
+  font-weight:700;cursor:pointer;transition:all .2s;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:5px;}
+.action-btn .icon{font-size:28px;line-height:1;}
+.action-btn:disabled{opacity:.3;cursor:not-allowed;}
+.ts-small{font-size:11px;font-weight:400;color:var(--muted);}
+
+.ct-btn:not(:disabled):hover        {border-color:#1565c0;background:rgba(21,101,192,.15);}
+.lab-btn:not(:disabled):hover       {border-color:#7b1fa2;background:rgba(123,31,162,.15);}
+.ct-result-btn:not(:disabled):hover {border-color:#00897b;background:rgba(0,137,123,.15);}
+.lab-result-btn:not(:disabled):hover{border-color:#f57f17;background:rgba(245,127,23,.15);}
+.admit-btn:not(:disabled):hover     {border-color:#2e7d32;background:rgba(46,125,50,.15);}
+.refer-btn:not(:disabled):hover     {border-color:#c62828;background:rgba(198,40,40,.15);}
+
+.ct-btn.stamped        {border-color:#1565c0;background:rgba(21,101,192,.18);color:#90caf9;}
+.lab-btn.stamped       {border-color:#7b1fa2;background:rgba(123,31,162,.18);color:#ce93d8;}
+.ct-result-btn.stamped {border-color:#00897b;background:rgba(0,137,123,.18);color:#80cbc4;}
+.lab-result-btn.stamped{border-color:#f57f17;background:rgba(245,127,23,.18);color:#ffcc02;}
+.admit-btn.stamped     {border-color:#2e7d32;background:rgba(46,125,50,.2);color:#a5d6a7;}
+.refer-btn.stamped     {border-color:#c62828;background:rgba(198,40,40,.2);color:#ef9a9a;}
+.ts-small{font-size:11px;font-weight:400;color:var(--muted);}
+
+/* incoming flash */
+@keyframes flash{0%{background:rgba(255,179,0,.25)}100%{background:transparent}}
+.incoming{animation:flash .8s ease-out 3;}
+
+.log-title{font-size:11px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;}
+.log{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;}
+.log:empty::after{content:'— ยังไม่มีรายการ —';font-size:13px;color:var(--muted);}
+.log-entry{display:flex;align-items:flex-start;gap:10px;padding:8px 12px;border-radius:8px;
+  background:rgba(255,255,255,.04);border-left:3px solid transparent;font-size:13px;animation:fi .3s ease;}
+@keyframes fi{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.log-entry.activate{border-color:var(--red);}
+.log-entry.ct      {border-color:#1565c0;}
+.log-entry.lab     {border-color:#7b1fa2;}
+.log-entry.alert   {border-color:var(--amber);}
+.log-entry.remote  {border-color:var(--green);}
+.sum-table{width:100%;border-collapse:collapse;font-size:13px;}
+.sum-table th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;
+  text-transform:uppercase;letter-spacing:.07em;padding:6px 8px;border-bottom:1px solid var(--border);}
+.sum-table td{padding:7px 8px;border-bottom:1px solid #1a1a2a;vertical-align:top;}
+.sum-table td:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--amber);text-align:right;}
+.sum-table tr:last-child td{border-bottom:none;}
+.sum-from{font-size:10px;color:var(--green);}
+.log-time{font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--muted);flex-shrink:0;padding-top:1px;min-width:56px;}
+.log-msg{flex:1;line-height:1.4;}
+.log-from{font-size:10px;color:var(--green);margin-top:2px;}
+.log-delta{font-size:11px;color:var(--amber);margin-top:2px;}
+</style>
+</head>
+<body>
+
+<!-- Unlock overlay — shift code + audio unlock -->
+<div class="overlay" id="overlay">
+  <h2>🔐 รหัสเข้าจับเวลา และเสียงแจ้งเตือน</h2>
+  <p>ใส่รหัสเพื่อเชื่อมต่อระบบแจ้งเตือน</p>
+  <input id="shift-code-input" type="password"
+    placeholder="รหัสเข้าจับเวลา"
+    autocomplete="off" spellcheck="false"
+    style="width:100%;max-width:300px;background:#1a1a2a;border:1px solid #2a2a4a;
+           border-radius:10px;padding:12px 14px;color:#fff;font-family:inherit;
+           font-size:16px;text-align:center;letter-spacing:2px;"
+    onkeydown="if(event.key==='Enter') startApp()"/>
+  <div id="code-error" style="font-size:13px;color:var(--red);min-height:18px;"></div>
+  <button class="btn-unlock" onclick="startApp()">เริ่มใช้งาน</button>
+</div>
+
+<div class="header">
+  <h1><span class="dot"></span> Stroke Fast Track <span class="dot"></span></h1>
+</div>
+
+<!-- Card 1: location + controls -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div class="conn-row">
+      <div class="conn-dot" id="conn-dot"></div>
+      <span id="conn-label">กำลังเชื่อมต่อ...</span>
+    </div>
+
+  </div>
+
+  <div class="loc-row">
+    <button class="loc-btn active" onclick="setLoc(this,'ER')">🏥 ER</button>
+    <button class="loc-btn" onclick="setLoc(this,'Ward')">🛏️ Ward</button>
+    <button class="loc-btn" onclick="setLoc(this,'LAB')">🧪 LAB</button>
+    <button class="loc-btn" onclick="setLoc(this,'CT')">📸 CT</button>
+  </div>
+
+  <div class="ctrl-row">
+    <div class="vol-wrap">
+      <span>🔉</span>
+      <input type="range" min="0" max="1" step="0.05" value="1"
+             oninput="appVol=parseFloat(this.value)"/>
+      <span>🔊</span>
+    </div>
+    <select id="voice-select" onchange="setVoice(this.value)"
+      style="background:#1a1a2a;border:1px solid #2a2a4a;border-radius:8px;
+             color:var(--text);font-family:inherit;font-size:12px;padding:7px 8px;
+             max-width:140px;flex:1;">
+      <option value="">เสียงอัตโนมัติ</option>
+    </select>
+    <button class="btn-sm" onclick="testSound()">▶ ทดสอบ</button>
+  </div>
+
+  <button class="btn-activate" id="btn-act" onclick="activate()">
+    🚨 ACTIVATE Stroke Fast Track
+  </button>
+</div>
+
+<!-- Card 2: timer + actions -->
+<div class="card">
+  <div class="timer-wrap">
+    <div class="timer" id="timer">00:00</div>
+    <div class="timer-label" id="timer-label">กดปุ่ม Activate เพื่อเริ่มจับเวลา</div>
+  </div>
+  <div class="milestones">
+    <span class="badge" id="m20">20 นาที</span>
+    <span class="badge" id="m30">30 นาที ⚡</span>
+    <span class="badge" id="m45">45 นาที</span>
+    <span class="badge" id="m60">60 นาที 🔴</span>
+  </div>
+  <div class="actions">
+    <button class="action-btn ct-btn" id="btn-ct" onclick="doAction('ct')" disabled>
+      <span class="icon">📸</span>
+      <span>แจ้ง CT<br/><small style="font-size:11px;font-weight:400">ส่งสแกนสมอง</small></span>
+      <span class="ts-small" id="ct-ts"></span>
+    </button>
+    <button class="action-btn lab-btn" id="btn-lab" onclick="doAction('lab')" disabled>
+      <span class="icon">🧪</span>
+      <span>แจ้ง LAB<br/><small style="font-size:11px;font-weight:400">ส่งตรวจเลือด</small></span>
+      <span class="ts-small" id="lab-ts"></span>
+    </button>
+    <button class="action-btn ct-result-btn" id="btn-ct-result" onclick="doAction('ct_result')" disabled>
+      <span class="icon">🖥️</span>
+      <span>CT ผลออกแล้ว<br/><small style="font-size:11px;font-weight:400">อ่านผลเสร็จ</small></span>
+      <span class="ts-small" id="ct-result-ts"></span>
+    </button>
+    <button class="action-btn lab-result-btn" id="btn-lab-result" onclick="doAction('lab_result')" disabled>
+      <span class="icon">📋</span>
+      <span>LAB ผลออกแล้ว<br/><small style="font-size:11px;font-weight:400">ได้รับผลเลือด</small></span>
+      <span class="ts-small" id="lab-result-ts"></span>
+    </button>
+    <button class="action-btn admit-btn" id="btn-admit" onclick="doAction('admit')" disabled>
+      <span class="icon">🛏️</span>
+      <span>Admit<br/><small style="font-size:11px;font-weight:400">รับไว้รักษา</small></span>
+      <span class="ts-small" id="admit-ts"></span>
+    </button>
+    <button class="action-btn refer-btn" id="btn-refer" onclick="doAction('refer')" disabled>
+      <span class="icon">🚑</span>
+      <span>Refer<br/><small style="font-size:11px;font-weight:400">ส่งต่อผู้ป่วย</small></span>
+      <span class="ts-small" id="refer-ts"></span>
+    </button>
+  </div>
+</div>
+
+<!-- Card 3: log -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <div class="log-title" style="margin-bottom:0">บันทึกเวลา</div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn-sm" onclick="copyLog()" id="btn-copy">📋 Copy</button>
+      <button class="btn-sm" onclick="downloadCSV()">⬇️ CSV</button>
+      <button class="btn-sm" onclick="resetAll()">↺ รีเซ็ต</button>
+    </div>
+  </div>
+  <div class="log" id="log"></div>
+
+  <!-- Summary table -->
+  <div id="summary-wrap" style="display:none;margin-top:14px;">
+    <div class="log-title" style="margin-bottom:8px;">สรุป</div>
+    <div id="summary-table"></div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════
+   ACTION DEFINITIONS
+═══════════════════════════════════════════ */
+const ACTIONS = {
+  activate:   { icon:'🚨', label:'Activate Stroke Fast Track', btnId:null,              tsId:null,              logType:'activate', speech:'Stroke Fast Track activated.',              playFn:'playActivate'   },
+  ct:         { icon:'📸', label:'แจ้ง CT ส่งสแกนสมอง',       btnId:'btn-ct',          tsId:'ct-ts',           logType:'ct',       speech:'CT scan requested. Stroke Fast Track.',   playFn:'playCT'         },
+  lab:        { icon:'🧪', label:'แจ้ง LAB ส่งตรวจเลือด',     btnId:'btn-lab',         tsId:'lab-ts',          logType:'lab',      speech:'Lab specimen sent. Stroke Fast Track.',   playFn:'playLAB'        },
+  ct_result:  { icon:'🖥️', label:'CT ผลออกแล้ว',              btnId:'btn-ct-result',   tsId:'ct-result-ts',    logType:'ct',       speech:'CT result available. Stroke Fast Track.', playFn:'playCT'         },
+  lab_result: { icon:'📋', label:'LAB ผลออกแล้ว',             btnId:'btn-lab-result',  tsId:'lab-result-ts',   logType:'lab',      speech:'Lab results available. Stroke Fast Track.',playFn:'playLAB'       },
+  admit:      { icon:'🛏️', label:'Admit รับไว้รักษา',         btnId:'btn-admit',       tsId:'admit-ts',        logType:'activate', speech:'Patient admitted. Stroke Fast Track complete.', playFn:'playAdmit' },
+  refer:      { icon:'🚑', label:'Refer ส่งต่อผู้ป่วย',        btnId:'btn-refer',       tsId:'refer-ts',        logType:'alert',    speech:'Patient referred. Stroke Fast Track complete.', playFn:'playRefer' },
+};
+
+/* ═══════════════════════════════════════════
+   WEB AUDIO
+═══════════════════════════════════════════ */
+let _ctx = null, appVol = 1;
+function ctx(){
+  if(!_ctx) _ctx = new (window.AudioContext||window.webkitAudioContext)();
+  if(_ctx.state==='suspended') _ctx.resume();
+  return _ctx;
+}
+function beep(freq,dur,type,delay,gain){
+  const ac=ctx(), t=ac.currentTime+(delay||0);
+  const o=ac.createOscillator(), g=ac.createGain();
+  o.connect(g); g.connect(ac.destination);
+  o.type=type||'sine'; o.frequency.value=freq;
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(appVol*(gain||0.6),t+0.01);
+  g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.start(t); o.stop(t+dur+0.05);
+}
+function playActivate(){ beep(440,.14,'square',0,.45);beep(554,.14,'square',.17,.45);beep(659,.35,'square',.34,.55); }
+function playCT()      { beep(880,.10,'sine',0,.55);beep(1100,.22,'sine',.14,.55); }
+function playLAB()     { beep(660,.10,'sine',0,.55);beep(990,.22,'sine',.14,.55); }
+function playAdmit()   { beep(523,.15,'sine',0,.55);beep(659,.15,'sine',.18,.55);beep(784,.3,'sine',.36,.6); }
+function playRefer()   { beep(880,.12,'square',0,.5);beep(660,.12,'square',.16,.5);beep(440,.3,'square',.32,.55); }
+function playMilestone(isRed){
+  if(isRed){ beep(440,.18,'sawtooth',0,.55);beep(440,.18,'sawtooth',.28,.55);beep(440,.4,'sawtooth',.56,.65); }
+  else      { beep(600,.18,'triangle',0,.45);beep(800,.28,'triangle',.24,.45); }
+}
+
+/* TTS */
+const synth=window.speechSynthesis;
+function speak(text,delay){
+  setTimeout(()=>{
+    try{
+      synth.cancel();
+      const u=new SpeechSynthesisUtterance(text);
+      u.lang='en-US'; u.volume=appVol; u.rate=0.92;
+      if(selectedVoice) u.voice=selectedVoice;
+      synth.speak(u);
+    }catch(e){}
+  },delay||0);
+}
+let selectedVoice = null;
+
+function populateVoices(){
+  const voices = synth.getVoices().filter(v=>v.lang.startsWith('en'));
+  const sel = document.getElementById('voice-select');
+  sel.innerHTML = '<option value="">เสียงอัตโนมัติ (female)</option>';
+  voices.forEach((v,i)=>{
+    const opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = v.name.length>22 ? v.name.slice(0,22)+'…' : v.name;
+    sel.appendChild(opt);
+  });
+  // auto-select female if found
+  const female = voices.find(v=>/female|zira|samantha|karen|victoria|susan|fiona|moira|tessa/i.test(v.name))
+               || voices[1] || voices[0];
+  if(female){ sel.value = female.name; selectedVoice = female; }
+}
+
+function setVoice(name){
+  selectedVoice = synth.getVoices().find(v=>v.name===name) || null;
+}
+
+speechSynthesis.addEventListener('voiceschanged',()=>{ synth.getVoices(); populateVoices(); });
+
+function testSound(){ playActivate(); speak('Stroke Fast Track. Sound test.',700); }
+
+/* ═══════════════════════════════════════════
+   ABLY REAL-TIME
+═══════════════════════════════════════════ */
+let ablyClient=null, channel=null;
+const CHANNEL = 'stroke-fast-track';
+
+function connectAbly(){
+  if(ablyClient){ try{ ablyClient.close(); }catch(e){} }
+
+  // ส่ง shift code ผ่าน query param — key ไม่ expose ใน browser เลย
+  ablyClient = new Ably.Realtime({
+    authUrl: `/api/ably-token?code=${encodeURIComponent(shiftCode)}`,
+    clientId: appLoc,
+  });
+
+  ablyClient.connection.on('connected', ()=>{
+    setConn('online', '🟢 เชื่อมต่อแล้ว — ' + appLoc);
+  });
+  ablyClient.connection.on('disconnected',()=> setConn('','🔴 ขาดการเชื่อมต่อ'));
+  ablyClient.connection.on('failed',()=>{    setConn('error','❌ เชื่อมต่อไม่ได้ — รหัสอาจหมดอายุ'); });
+
+  channel = ablyClient.channels.get(CHANNEL);
+
+  channel.subscribe(msg => {
+    const d = msg.data;
+    if(!d) return;
+    const from = msg.clientId || d.from || '?';
+    if(from === appLoc && d.action !== 'milestone') return;
+
+    const def = ACTIONS[d.action];
+    if(def){
+      window[def.playFn]();
+      speak(def.speech, 400);
+      addLog('remote', def.icon, `${def.label}`, d.delta, from);
+      document.querySelectorAll('.card').forEach(c=>{ c.classList.add('incoming'); setTimeout(()=>c.classList.remove('incoming'),2500); });
+    }
+    if(d.action==='milestone'){
+      playMilestone(d.isRed);
+      speak(d.speech, 400);
+      addLog('alert','⏰',d.label, null, from);
+    }
+  });
+}
+
+function publish(action, extraData){
+  if(!channel) return;
+  const def = ACTIONS[action];
+  const delta = startTs ? Date.now()-startTs : null;
+  channel.publish('event', { action, from: appLoc, delta, speech: def?.speech, ...extraData });
+}
+
+function setConn(state, label){
+  const dot=document.getElementById('conn-dot');
+  const lbl=document.getElementById('conn-label');
+  dot.className='conn-dot'+(state?' '+state:'');
+  lbl.textContent=label;
+}
+
+/* ═══════════════════════════════════════════
+   APP STATE
+═══════════════════════════════════════════ */
+let startTs=null, ticker=null, appLoc='ER', shiftCode='';
+let mHit={20:false,30:false,45:false,60:false};
+
+function setLoc(btn,loc){
+  appLoc=loc;
+  document.querySelectorAll('.loc-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if(ablyClient) ablyClient.auth.clientId=loc;
+}
+
+function pad(n){return String(n).padStart(2,'0');}
+function timeNow(){const d=new Date();return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
+function fmtMs(ms){
+  const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;
+  return h>0?`${pad(h)}:${pad(m)}:${pad(sc)}`:`${pad(m)}:${pad(sc)}`;
+}
+
+/* Activate */
+function activate(){
+  if(startTs) return;
+  startTs=Date.now();
+  document.getElementById('btn-act').disabled=true;
+  ['btn-ct','btn-lab','btn-ct-result','btn-lab-result','btn-admit','btn-refer']
+    .forEach(id=>document.getElementById(id).disabled=false);
+  playActivate();
+  speak(`Stroke Fast Track activated at ${appLoc}.`,700);
+  addLog('activate','🚨',`Activate — ${appLoc}`,null,null);
+  publish('activate');
+  ticker=setInterval(tick,500);
+}
+
+/* doAction — ปุ่มทั้ง 6 ใช้ฟังก์ชันนี้ */
+function doAction(action){
+  const def=ACTIONS[action];
+  if(!def) return;
+  const delta=Date.now()-startTs;
+
+  if(def.btnId){ document.getElementById(def.btnId).classList.add('stamped'); }
+  if(def.tsId) { document.getElementById(def.tsId).textContent=timeNow(); }
+
+  window[def.playFn]();
+  speak(def.speech,350);
+  addLog(def.logType,def.icon,def.label,delta,null);
+  publish(action);
+}
+
+/* Tick */
+function tick(){
+  const el=Date.now()-startTs, min=Math.floor(el/60000);
+  const t=document.getElementById('timer');
+  t.textContent=fmtMs(el);
+  if(min>=60){t.className='timer crit';document.getElementById('timer-label').textContent='⚠️ เกิน 60 นาที';}
+  else if(min>=30){t.className='timer warn';document.getElementById('timer-label').textContent=`ผ่านไป ${min} นาที`;}
+  else{t.className='timer';document.getElementById('timer-label').textContent=`ผ่านไป ${min} นาที`;}
+  checkMilestones(min,el);
+}
+
+/* Milestones */
+const MS=[
+  {m:20,id:'m20',speech:'20 minutes. Stroke Fast Track.',                        label:'ครบ 20 นาที',red:false},
+  {m:30,id:'m30',speech:'30 minutes. Please check door to needle time.',         label:'ครบ 30 นาที',red:false},
+  {m:45,id:'m45',speech:'45 minutes. Stroke Fast Track.',                        label:'ครบ 45 นาที',red:false},
+  {m:60,id:'m60',speech:'60 minutes. Exceeding door to needle target.',          label:'ครบ 60 นาที',red:true },
+];
+function checkMilestones(min,el){
+  MS.forEach(d=>{
+    if(min>=d.m&&!mHit[d.m]){
+      mHit[d.m]=true;
+      const b=document.getElementById(d.id);
+      b.classList.add('hit'); if(d.red) b.classList.add('crit');
+      playMilestone(d.red);
+      speak(d.speech,900);
+      addLog('alert','⏰',d.label,el,null);
+      // broadcast milestone ให้ทุก device
+      if(channel) channel.publish('event',{action:'milestone',from:appLoc,isRed:d.red,speech:d.speech,label:d.label});
+    }
+  });
+}
+
+/* Log */
+// structured log data for export
+const logData = [];
+
+function fmtDelta(ms){
+  if(ms==null) return '';
+  return `+${Math.floor(ms/60000)}m ${Math.floor((ms%60000)/1000)}s`;
+}
+
+function addLog(type,icon,msg,deltaMs,from){
+  const ts = timeNow();
+  const entry = { ts, type, icon, msg, deltaMs, from: from||null };
+  logData.unshift(entry);
+
+  const log=document.getElementById('log');
+  const e=document.createElement('div');
+  e.className=`log-entry ${type}`;
+  const d=deltaMs!=null?`<div class="log-delta">${fmtDelta(deltaMs)}</div>`:'';
+  const f=from?`<div class="log-from">📡 จาก ${from}</div>`:'';
+  e.innerHTML=`<div class="log-time">${ts}</div><div class="log-msg">${icon} ${msg}${d}${f}</div>`;
+  log.prepend(e);
+  renderSummary();
+}
+
+function renderSummary(){
+  const wrap = document.getElementById('summary-wrap');
+  if(logData.length===0){ wrap.style.display='none'; return; }
+  wrap.style.display='block';
+
+  // เรียงเวลาจากเก่าสุด
+  const rows = [...logData].reverse();
+  let html = `<table class="sum-table">
+    <thead><tr><th>เวลา</th><th>รายการ</th><th>Delta</th></tr></thead><tbody>`;
+  rows.forEach(r=>{
+    const from = r.from ? `<div class="sum-from">📡 ${r.from}</div>` : '';
+    html += `<tr>
+      <td>${r.ts}</td>
+      <td>${r.icon} ${r.msg}${from}</td>
+      <td>${fmtDelta(r.deltaMs)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('summary-table').innerHTML = html;
+}
+
+function copyLog(){
+  if(logData.length===0){ alert('ยังไม่มีข้อมูล'); return; }
+  const rows = [...logData].reverse();
+  const lines = ['เวลา	รายการ	Delta	จาก'];
+  rows.forEach(r=>{
+    lines.push([r.ts, `${r.icon} ${r.msg}`, fmtDelta(r.deltaMs)||'-', r.from||'-'].join('	'));
+  });
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>{
+    const btn = document.getElementById('btn-copy');
+    btn.textContent = '✅ Copied!';
+    setTimeout(()=>btn.textContent='📋 Copy', 2000);
+  });
+}
+
+function downloadCSV(){
+  if(logData.length===0){ alert('ยังไม่มีข้อมูล'); return; }
+  const rows = [...logData].reverse();
+  const header = 'Time,Event,Delta_min,Delta_sec,From,Type';
+  const lines = rows.map(r=>{
+    const min = r.deltaMs!=null ? Math.floor(r.deltaMs/60000) : '';
+    const sec = r.deltaMs!=null ? Math.floor((r.deltaMs%60000)/1000) : '';
+    const msg = r.msg.replace(/,/g,' ');
+    return `${r.ts},"${r.icon} ${msg}",${min},${sec},${r.from||''},${r.type}`;
+  });
+  const csv = [header, ...lines].join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().slice(0,10);
+  a.href=url; a.download=`stroke-fast-track-${dateStr}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+/* Reset */
+function resetAll(){
+  if(startTs&&!confirm('รีเซ็ตและล้างข้อมูลทั้งหมด?')) return;
+  clearInterval(ticker); startTs=null; ticker=null;
+  mHit={20:false,30:false,45:false,60:false};
+  document.getElementById('timer').textContent='00:00';
+  document.getElementById('timer').className='timer';
+  document.getElementById('timer-label').textContent='กดปุ่ม Activate เพื่อเริ่มจับเวลา';
+  document.getElementById('btn-act').disabled=false;
+  ['btn-ct','btn-lab','btn-ct-result','btn-lab-result','btn-admit','btn-refer']
+    .forEach(id=>{const el=document.getElementById(id);el.disabled=true;el.classList.remove('stamped');});
+  ['ct-ts','lab-ts','ct-result-ts','lab-result-ts','admit-ts','refer-ts']
+    .forEach(id=>document.getElementById(id).textContent='');
+  document.getElementById('log').innerHTML='';
+  logData.length=0;
+  document.getElementById('summary-wrap').style.display='none';
+  ['m20','m30','m45','m60'].forEach(id=>document.getElementById(id).classList.remove('hit','crit'));
+  synth.cancel();
+}
+
+/* ═══════════════════════════════════════════
+   STARTUP
+═══════════════════════════════════════════ */
+async function startApp(){
+  const code = document.getElementById('shift-code-input').value.trim();
+  const errEl = document.getElementById('code-error');
+  if(!code){ errEl.textContent='กรุณาใส่รหัสเข้าจับเวลา'; return; }
+  errEl.textContent='';
+
+  // ตรวจ code กับ server ก่อน
+  const btn = document.querySelector('.btn-unlock');
+  btn.textContent='กำลังตรวจสอบ...'; btn.disabled=true;
+  try{
+    const res = await fetch(`/api/ably-token?code=${encodeURIComponent(code)}`);
+    if(res.status===401){
+      errEl.textContent='❌ รหัสไม่ถูกต้อง';
+      btn.textContent='เริ่มใช้งาน'; btn.disabled=false;
+      return;
+    }
+    if(res.status===403){
+      errEl.textContent='❌ ไม่อนุญาตให้เข้าถึง';
+      btn.textContent='เริ่มใช้งาน'; btn.disabled=false;
+      return;
+    }
+  } catch(e){
+    errEl.textContent='❌ เชื่อมต่อ server ไม่ได้';
+    btn.textContent='เริ่มใช้งาน'; btn.disabled=false;
+    return;
+  }
+
+  shiftCode = code;
+  ctx(); synth.getVoices();
+  beep(880,.08,'sine',0,.25);
+  document.getElementById('overlay').style.display='none';
+  connectAbly();
+}
+
+window.addEventListener('load',()=>{
+  // overlay แสดงเสมอ ต้องใส่รหัสกะทุกครั้ง
+  document.getElementById('shift-code-input').focus();
+});
+</script>
+</body>
+</html>

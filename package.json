@@ -1,0 +1,7 @@
+{
+  "name": "stroke-timer",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "wrangler pages dev . --port 8788"
+  }
+}
