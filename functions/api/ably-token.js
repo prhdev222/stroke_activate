@@ -28,6 +28,7 @@ export async function onRequest(context) {
   // staff ต้องส่ง code ถูกต้อง ถึงจะได้ token
   const url      = new URL(request.url);
   const sentCode = url.searchParams.get('code') || '';
+  const clientId = url.searchParams.get('clientId') || '';
   const roomCode = env.ROOM_CODE || '';
 
   if (roomCode && sentCode !== roomCode) {
@@ -46,10 +47,18 @@ export async function onRequest(context) {
     headers: {
       'Authorization': 'Basic ' + btoa(apiKey),
       'Content-Type': 'application/json',
+      // ช่วยให้ behavior เสถียรขึ้นตามเวอร์ชัน API ของ Ably
+      'X-Ably-Version': '2.0',
     },
     body: JSON.stringify({
-      capability: { 'stroke-fast-track': ['publish', 'subscribe'] },
-      ttl: 3_600_000,   // 1 ชั่วโมง — SDK renew อัตโนมัติ
+      // Ably รับ capability ได้ทั้ง string และ object แต่บาง runtime/edge case จะ strict
+      // เลยส่งเป็น JSON string ให้ชัวร์
+      capability: JSON.stringify({ 'stroke-fast-track': ['publish', 'subscribe'] }),
+      // ให้ Ably ออก token ผูกกับ clientId ที่หน้าเว็บส่งมา (เช่น ER/Ward/LAB/CT)
+      ...(clientId ? { clientId } : {}),
+      // บางครั้ง Ably จะ validate token request body แบบ strict และคาดหวัง timestamp เป็น number/string
+      timestamp: Date.now(),
+      ttl: 3600000,   // 1 ชั่วโมง — SDK renew อัตโนมัติ
     }),
   });
 
