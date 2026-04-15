@@ -330,7 +330,6 @@ function populateVoices(){
     opt.textContent = v.name.length>22 ? v.name.slice(0,22)+'…' : v.name;
     sel.appendChild(opt);
   });
-  // auto-select female if found
   const female = voices.find(v=>/female|zira|samantha|karen|victoria|susan|fiona|moira|tessa/i.test(v.name))
                || voices[1] || voices[0];
   if(female){ sel.value = female.name; selectedVoice = female; }
@@ -353,9 +352,7 @@ const CHANNEL = 'stroke-fast-track';
 function connectAbly(){
   if(ablyClient){ try{ ablyClient.close(); }catch(e){} }
 
-  // ส่ง shift code ผ่าน query param — key ไม่ expose ใน browser เลย
   ablyClient = new Ably.Realtime({
-    // ผูก clientId กับ station เพื่อให้ msg.clientId เป็น ER/Ward/LAB/CT (กัน log ซ้ำ)
     authUrl: `/api/ably-token?code=${encodeURIComponent(shiftCode)}&clientId=${encodeURIComponent(appLoc)}`,
     clientId: appLoc,
   });
@@ -368,9 +365,6 @@ function connectAbly(){
 
   channel = ablyClient.channels.get(CHANNEL);
 
-  // ถ้าเปิดหน้า LAB/CT ทีหลัง (หรือรีเฟรช) ให้ตามเคสล่าสุดให้ได้
-  // โดยดึง history หาตัว activate ล่าสุดที่มี startTs
-  // ใช้ promise + catch เพื่อกัน unhandled rejection ใน console
   channel.history({ limit: 50, direction: 'backwards' })
     .then(page => {
       const items = page?.items || [];
@@ -451,10 +445,8 @@ function setLoc(btn,loc){
   appLoc=loc;
   document.querySelectorAll('.loc-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  // เปลี่ยน station ต้องขอ token ใหม่เพื่อให้ clientId ถูกต้อง
   if(ablyClient) connectAbly();
   if(startTs) enableButtonsForLoc(loc);
-  // Activate ให้ทำได้เฉพาะ ER/Ward
   if(!startTs){
     document.getElementById('btn-act').disabled = !(loc==='ER' || loc==='Ward');
   }
@@ -483,7 +475,7 @@ function activate(){
   publish('activate', { startTs: ts });
 }
 
-/* doAction — ปุ่มทั้ง 6 ใช้ฟังก์ชันนี้ */
+/* doAction */
 function doAction(action){
   const def=ACTIONS[action];
   if(!def) return;
@@ -529,14 +521,12 @@ function checkMilestones(min,el){
       playMilestone(d.red);
       speak(d.speech,900);
       addLog('alert','⏰',d.label,el,null);
-      // broadcast milestone ให้ทุก device
       if(channel) channel.publish('event',{action:'milestone',from:appLoc,isRed:d.red,speech:d.speech,label:d.label});
     }
   });
 }
 
 /* Log */
-// structured log data for export
 const logData = [];
 
 function fmtDelta(ms){
@@ -564,7 +554,6 @@ function renderSummary(){
   if(logData.length===0){ wrap.style.display='none'; return; }
   wrap.style.display='block';
 
-  // เรียงเวลาจากเก่าสุด
   const rows = [...logData].reverse();
   let html = `<table class="sum-table">
     <thead><tr><th>เวลา</th><th>รายการ</th><th>Delta</th></tr></thead><tbody>`;
@@ -642,7 +631,6 @@ async function startApp(){
   if(!code){ errEl.textContent='กรุณาใส่รหัสเข้าจับเวลา'; return; }
   errEl.textContent='';
 
-  // ตรวจ code กับ server ก่อน
   const btn = document.querySelector('.btn-unlock');
   btn.textContent='กำลังตรวจสอบ...'; btn.disabled=true;
   try{
@@ -670,11 +658,44 @@ async function startApp(){
   connectAbly();
 }
 
-window.addEventListener('load',()=>{
-  // overlay แสดงเสมอ ต้องใส่รหัสกะทุกครั้ง
-  // ตอนยังไม่เริ่มเคส ให้ Activate ใช้ได้เฉพาะ ER/Ward
-  document.getElementById('btn-act').disabled = !(appLoc==='ER' || appLoc==='Ward');
-  document.getElementById('shift-code-input').focus();
+/* ═══════════════════════════════════════════
+   QR TOKEN MAP — token ใน URL → dept + auto-login
+   token ต้องตรงกับ QR_TOKENS env var ใน Cloudflare
+═══════════════════════════════════════════ */
+const QR_DEPT_MAP = {
+  'PRH_ER_2025':  'ER',
+  'PRH_WD_2025':  'Ward',
+  'PRH_CT_2025':  'CT',
+  'PRH_LB_2025':  'LAB',
+};
+
+window.addEventListener('load', () => {
+  document.getElementById('btn-act').disabled = !(appLoc === 'ER' || appLoc === 'Ward');
+
+  // ── ตรวจ QR token ใน URL ──────────────────────────────────────────
+  const urlToken = new URLSearchParams(window.location.search).get('token');
+  const dept = urlToken ? QR_DEPT_MAP[urlToken] : null;
+
+  if (dept) {
+    // 1. ตั้ง dept ตาม QR
+    appLoc = dept;
+    document.querySelectorAll('.loc-btn').forEach(b => b.classList.remove('active'));
+    const deptBtn = [...document.querySelectorAll('.loc-btn')]
+      .find(b => (b.getAttribute('onclick') || '').includes(`'${dept}'`));
+    if (deptBtn) deptBtn.classList.add('active');
+    document.getElementById('btn-act').disabled = !(dept === 'ER' || dept === 'Ward');
+
+    // 2. ใส่ token ลง input แล้ว auto-login
+    document.getElementById('shift-code-input').value = urlToken;
+
+    // 3. ลบ token ออกจาก URL bar (ไม่ให้ปรากฏใน history/screenshot)
+    history.replaceState({}, '', window.location.pathname);
+
+    // 4. เรียก startApp() อัตโนมัติ
+    startApp();
+  } else {
+    document.getElementById('shift-code-input').focus();
+  }
 });
 </script>
 </body>
