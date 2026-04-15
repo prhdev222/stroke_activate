@@ -355,7 +355,8 @@ function connectAbly(){
 
   // ส่ง shift code ผ่าน query param — key ไม่ expose ใน browser เลย
   ablyClient = new Ably.Realtime({
-    authUrl: `/api/ably-token?code=${encodeURIComponent(shiftCode)}`,
+    // ผูก clientId กับ station เพื่อให้ msg.clientId เป็น ER/Ward/LAB/CT (กัน log ซ้ำ)
+    authUrl: `/api/ably-token?code=${encodeURIComponent(shiftCode)}&clientId=${encodeURIComponent(appLoc)}`,
     clientId: appLoc,
   });
 
@@ -381,7 +382,7 @@ function connectAbly(){
   channel.subscribe(msg => {
     const d = msg.data;
     if(!d) return;
-    const from = msg.clientId || d.from || '?';
+    const from = d.from || msg.clientId || '?';
     if(from === appLoc && d.action !== 'milestone') return;
 
     const def = ACTIONS[d.action];
@@ -450,7 +451,8 @@ function setLoc(btn,loc){
   appLoc=loc;
   document.querySelectorAll('.loc-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  if(ablyClient) ablyClient.auth.clientId=loc;
+  // เปลี่ยน station ต้องขอ token ใหม่เพื่อให้ clientId ถูกต้อง
+  if(ablyClient) connectAbly();
   if(startTs) enableButtonsForLoc(loc);
   // Activate ให้ทำได้เฉพาะ ER/Ward
   if(!startTs){
