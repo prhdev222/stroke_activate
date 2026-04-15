@@ -5,18 +5,18 @@
  * Environment Variables (Cloudflare Pages → Settings → Environment Variables):
  *   ABLY_API_KEY   = root:xxxxxxxxxxxxxxxx
  *   ROOM_CODE      = รหัสกะ เช่น "PRH-2026" เปลี่ยนได้ทุกกะ
- *   ALLOWED_ORIGIN = https://stroke-prh.pages.dev (โดเมนของโรงพยาบาล)
+ *   QR_TOKENS      = PRH_ER_2025,PRH_WD_2025,PRH_CT_2025,PRH_LB_2025  (คั่นด้วย ,)
+ *   ALLOWED_ORIGIN = https://stroke-activate.pages.dev
  */
 export async function onRequest(context) {
   const { request, env } = context;
 
   // ── Layer 1: Origin / Referer check ──────────────────────────────
-  // ป้องกันคนนอกโดเมนขอ token
   const origin   = request.headers.get('Origin')  || '';
   const referer  = request.headers.get('Referer') || '';
   const allowed  = env.ALLOWED_ORIGIN || '';
 
-  const originOk = !allowed                          // ถ้าไม่ตั้ง env ให้ผ่าน (dev mode)
+  const originOk = !allowed
     || origin.startsWith(allowed)
     || referer.startsWith(allowed);
 
@@ -24,26 +24,31 @@ export async function onRequest(context) {
     return respond(403, { error: 'Forbidden: invalid origin' });
   }
 
-  // ── Layer 2: Shift code check ────────────────────────────────────
-  // staff ต้องส่ง code ถูกต้อง ถึงจะได้ token
+  // ── Layer 2: Shift code / QR token check ─────────────────────────
   const url      = new URL(request.url);
   const sentCode = url.searchParams.get('code') || '';
   const clientId = url.searchParams.get('clientId') || '';
   const roomCode = env.ROOM_CODE || '';
 
-  if (roomCode && sentCode !== roomCode) {
-    // delay เล็กน้อยเพื่อชะลอ brute force
-    await new Promise(r => setTimeout(r, 600));
+  // QR_TOKENS = comma-separated list ของ token ที่ฝังใน QR Code
+  const qrTokens = (env.QR_TOKENS || '')
+    .split(',')
+    .map(t => t.trim())
+    .filter(Boolean);
+
+  const isValid = !roomCode                     // dev mode (ไม่ตั้ง env)
+    || sentCode === roomCode                    // รหัสกะปกติ
+    || qrTokens.includes(sentCode);            // QR token
+
+  if (!isValid) {
+    await new Promise(r => setTimeout(r, 600)); // ชะลอ brute force
     return respond(401, { error: 'Invalid shift code' });
   }
 
   // ── Issue Ably TokenRequest (signed) ─────────────────────────────
-  // สำหรับ Ably JS SDK (authUrl) แนวทางที่เสถียรคือให้ server สร้าง TokenRequest + mac
-  // แล้ว SDK จะนำไปแลก token เอง (ไม่ต้องเรียก requestToken REST จาก server)
   const apiKey  = env.ABLY_API_KEY;
   if (!apiKey) return respond(500, { error: 'ABLY_API_KEY not configured' });
 
-  // debug เฉพาะตอน dev (ไม่ได้ตั้ง ALLOWED_ORIGIN) เพื่อไม่ให้ leak ค่า secret ใน production
   if (!allowed && url.searchParams.get('debug') === '1') {
     const s = String(apiKey);
     return respond(200, {
@@ -63,10 +68,10 @@ export async function onRequest(context) {
   const keySecret = colonIdx >= 0 ? apiKeyTrimmed.slice(colonIdx + 1) : '';
   if (!keyName || !keySecret) return respond(500, { error: 'ABLY_API_KEY invalid format' });
 
-  const ttl = 3_600_000; // 1 ชั่วโมง
+  const ttl = 3_600_000;
   const capabilityObj = { 'stroke-fast-track': ['publish', 'subscribe', 'history'] };
   const capability = canonicalCapability(capabilityObj);
-  const timestamp = Date.now(); // ms since epoch (number)
+  const timestamp = Date.now();
   const nonce = randomNonce(24);
 
   const tokenRequest = {
@@ -93,8 +98,6 @@ function respond(status, body) {
 }
 
 function canonicalCapability(obj) {
-  // สเปก Ably แนะนำให้ capability เป็น JSON string ที่ deterministic (เรียง key/values)
-  // เพื่อให้ sign แล้วฝั่ง Ably ตรวจได้ตรงกัน
   const sorted = {};
   for (const channel of Object.keys(obj).sort()) {
     const ops = Array.isArray(obj[channel]) ? obj[channel].slice().sort() : [];
@@ -106,7 +109,6 @@ function canonicalCapability(obj) {
 function randomNonce(length) {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
-  // base64url-ish แบบง่าย (A-Z a-z 0-9) เพื่อให้เป็น string ปลอดภัย
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let out = '';
   for (let i = 0; i < bytes.length; i++) out += chars[bytes[i] % chars.length];
@@ -114,8 +116,6 @@ function randomNonce(length) {
 }
 
 async function signTokenRequestMac(tokenRequest, keySecret) {
-  // TokenRequest canonical string (Ably spec):
-  // keyName\nttl\ncapability\nclientId\ntimestamp\nnonce\n
   const canonical =
     String(tokenRequest.keyName ?? '') + '\n' +
     String(tokenRequest.ttl ?? '') + '\n' +
@@ -139,7 +139,6 @@ async function signTokenRequestMac(tokenRequest, keySecret) {
 function base64FromArrayBuffer(buf) {
   const bytes = new Uint8Array(buf);
   let bin = '';
-  // chunk เพื่อไม่ให้ stack/arg ยาวเกิน
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
     bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
