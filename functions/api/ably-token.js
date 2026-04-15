@@ -64,7 +64,7 @@ export async function onRequest(context) {
   if (!keyName || !keySecret) return respond(500, { error: 'ABLY_API_KEY invalid format' });
 
   const ttl = 3_600_000; // 1 ชั่วโมง
-  const capabilityObj = { 'stroke-fast-track': ['publish', 'subscribe'] };
+  const capabilityObj = { 'stroke-fast-track': ['publish', 'subscribe', 'history'] };
   const capability = canonicalCapability(capabilityObj);
   const timestamp = Date.now(); // ms since epoch (number)
   const nonce = randomNonce(24);

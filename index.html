@@ -369,13 +369,14 @@ function connectAbly(){
 
   // ถ้าเปิดหน้า LAB/CT ทีหลัง (หรือรีเฟรช) ให้ตามเคสล่าสุดให้ได้
   // โดยดึง history หาตัว activate ล่าสุดที่มี startTs
-  channel.history({ limit: 50, direction: 'backwards' }, (err, page) => {
-    if(err || !page?.items) return;
-    const lastActivate = page.items.find(it => it?.data?.action === 'activate' && typeof it?.data?.startTs === 'number');
-    if(lastActivate && !startTs){
-      startCaseAt(lastActivate.data.startTs);
-    }
-  });
+  // ใช้ promise + catch เพื่อกัน unhandled rejection ใน console
+  channel.history({ limit: 50, direction: 'backwards' })
+    .then(page => {
+      const items = page?.items || [];
+      const lastActivate = items.find(it => it?.data?.action === 'activate' && typeof it?.data?.startTs === 'number');
+      if(lastActivate && !startTs) startCaseAt(lastActivate.data.startTs);
+    })
+    .catch(()=>{});
 
   channel.subscribe(msg => {
     const d = msg.data;
