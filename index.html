@@ -109,7 +109,6 @@ body{display:flex;flex-direction:column;align-items:center;
 .refer-btn.stamped     {border-color:#c62828;background:rgba(198,40,40,.2);color:#ef9a9a;}
 .ts-small{font-size:11px;font-weight:400;color:var(--muted);}
 
-/* incoming flash */
 @keyframes flash{0%{background:rgba(255,179,0,.25)}100%{background:transparent}}
 .incoming{animation:flash .8s ease-out 3;}
 
@@ -140,7 +139,6 @@ body{display:flex;flex-direction:column;align-items:center;
 </head>
 <body>
 
-<!-- Unlock overlay — shift code + audio unlock -->
 <div class="overlay" id="overlay">
   <h2>🔐 รหัสเข้าจับเวลา และเสียงแจ้งเตือน</h2>
   <p>ใส่รหัสเพื่อเชื่อมต่อระบบแจ้งเตือน</p>
@@ -159,14 +157,12 @@ body{display:flex;flex-direction:column;align-items:center;
   <h1><span class="dot"></span> Stroke Fast Track <span class="dot"></span></h1>
 </div>
 
-<!-- Card 1: location + controls -->
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
     <div class="conn-row">
       <div class="conn-dot" id="conn-dot"></div>
       <span id="conn-label">กำลังเชื่อมต่อ...</span>
     </div>
-
   </div>
 
   <div class="loc-row">
@@ -197,7 +193,6 @@ body{display:flex;flex-direction:column;align-items:center;
   </button>
 </div>
 
-<!-- Card 2: timer + actions -->
 <div class="card">
   <div class="timer-wrap">
     <div class="timer" id="timer">00:00</div>
@@ -243,7 +238,6 @@ body{display:flex;flex-direction:column;align-items:center;
   </div>
 </div>
 
-<!-- Card 3: log -->
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
     <div class="log-title" style="margin-bottom:0">บันทึกเวลา</div>
@@ -254,8 +248,6 @@ body{display:flex;flex-direction:column;align-items:center;
     </div>
   </div>
   <div class="log" id="log"></div>
-
-  <!-- Summary table -->
   <div id="summary-wrap" style="display:none;margin-top:14px;">
     <div class="log-title" style="margin-bottom:8px;">สรุป</div>
     <div id="summary-table"></div>
@@ -263,9 +255,6 @@ body{display:flex;flex-direction:column;align-items:center;
 </div>
 
 <script>
-/* ═══════════════════════════════════════════
-   ACTION DEFINITIONS
-═══════════════════════════════════════════ */
 const ACTIONS = {
   activate:   { icon:'🚨', label:'Activate Stroke Fast Track', btnId:null,              tsId:null,              logType:'activate', speech:'Stroke Fast Track activated.',              playFn:'playActivate'   },
   ct:         { icon:'📸', label:'แจ้ง CT ส่งสแกนสมอง',       btnId:'btn-ct',          tsId:'ct-ts',           logType:'ct',       speech:'CT scan requested. Stroke Fast Track.',   playFn:'playCT'         },
@@ -276,9 +265,6 @@ const ACTIONS = {
   refer:      { icon:'🚑', label:'Refer ส่งต่อผู้ป่วย',        btnId:'btn-refer',       tsId:'refer-ts',        logType:'alert',    speech:'Patient referred. Stroke Fast Track complete.', playFn:'playRefer' },
 };
 
-/* ═══════════════════════════════════════════
-   WEB AUDIO
-═══════════════════════════════════════════ */
 let _ctx = null, appVol = 1;
 function ctx(){
   if(!_ctx) _ctx = new (window.AudioContext||window.webkitAudioContext)();
@@ -305,7 +291,6 @@ function playMilestone(isRed){
   else      { beep(600,.18,'triangle',0,.45);beep(800,.28,'triangle',.24,.45); }
 }
 
-/* TTS */
 const synth=window.speechSynthesis;
 function speak(text,delay){
   setTimeout(()=>{
@@ -334,56 +319,37 @@ function populateVoices(){
                || voices[1] || voices[0];
   if(female){ sel.value = female.name; selectedVoice = female; }
 }
-
-function setVoice(name){
-  selectedVoice = synth.getVoices().find(v=>v.name===name) || null;
-}
-
+function setVoice(name){ selectedVoice = synth.getVoices().find(v=>v.name===name) || null; }
 speechSynthesis.addEventListener('voiceschanged',()=>{ synth.getVoices(); populateVoices(); });
-
 function testSound(){ playActivate(); speak('Stroke Fast Track. Sound test.',700); }
 
-/* ═══════════════════════════════════════════
-   ABLY REAL-TIME
-═══════════════════════════════════════════ */
 let ablyClient=null, channel=null;
 const CHANNEL = 'stroke-fast-track';
 
 function connectAbly(){
   if(ablyClient){ try{ ablyClient.close(); }catch(e){} }
-
   ablyClient = new Ably.Realtime({
     authUrl: `/api/ably-token?code=${encodeURIComponent(shiftCode)}&clientId=${encodeURIComponent(appLoc)}`,
     clientId: appLoc,
   });
-
-  ablyClient.connection.on('connected', ()=>{
-    setConn('online', '🟢 เชื่อมต่อแล้ว — ' + appLoc);
-  });
+  ablyClient.connection.on('connected', ()=>{ setConn('online', '🟢 เชื่อมต่อแล้ว — ' + appLoc); });
   ablyClient.connection.on('disconnected',()=> setConn('','🔴 ขาดการเชื่อมต่อ'));
-  ablyClient.connection.on('failed',()=>{    setConn('error','❌ เชื่อมต่อไม่ได้ — รหัสอาจหมดอายุ'); });
-
+  ablyClient.connection.on('failed',()=>{ setConn('error','❌ เชื่อมต่อไม่ได้ — รหัสอาจหมดอายุ'); });
   channel = ablyClient.channels.get(CHANNEL);
-
   channel.history({ limit: 50, direction: 'backwards' })
     .then(page => {
       const items = page?.items || [];
       const lastActivate = items.find(it => it?.data?.action === 'activate' && typeof it?.data?.startTs === 'number');
       if(lastActivate && !startTs) startCaseAt(lastActivate.data.startTs);
-    })
-    .catch(()=>{});
-
+    }).catch(()=>{});
   channel.subscribe(msg => {
     const d = msg.data;
     if(!d) return;
     const from = d.from || msg.clientId || '?';
     if(from === appLoc && d.action !== 'milestone') return;
-
     const def = ACTIONS[d.action];
     if(def){
-      if(d.action === 'activate' && !startTs && typeof d.startTs === 'number'){
-        startCaseAt(d.startTs);
-      }
+      if(d.action === 'activate' && !startTs && typeof d.startTs === 'number') startCaseAt(d.startTs);
       window[def.playFn]();
       speak(def.speech, 400);
       addLog('remote', def.icon, `${def.label}`, d.delta, from);
@@ -405,32 +371,18 @@ function publish(action, extraData){
 }
 
 function setConn(state, label){
-  const dot=document.getElementById('conn-dot');
-  const lbl=document.getElementById('conn-label');
-  dot.className='conn-dot'+(state?' '+state:'');
-  lbl.textContent=label;
+  document.getElementById('conn-dot').className='conn-dot'+(state?' '+state:'');
+  document.getElementById('conn-label').textContent=label;
 }
 
-/* ═══════════════════════════════════════════
-   APP STATE
-═══════════════════════════════════════════ */
 let startTs=null, ticker=null, appLoc='ER', shiftCode='';
 let mHit={20:false,30:false,45:false,60:false};
 
 function enableButtonsForLoc(loc){
   const all = ['btn-ct','btn-lab','btn-ct-result','btn-lab-result','btn-admit','btn-refer'];
-  const enableMap = {
-    ER:   all,
-    Ward: all,
-    LAB:  ['btn-lab','btn-lab-result'],
-    CT:   ['btn-ct','btn-ct-result'],
-  };
+  const enableMap = { ER:all, Ward:all, LAB:['btn-lab','btn-lab-result'], CT:['btn-ct','btn-ct-result'] };
   const enabled = new Set(enableMap[loc] || all);
-  all.forEach(id=>{
-    const el = document.getElementById(id);
-    if(!el) return;
-    el.disabled = !enabled.has(id);
-  });
+  all.forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=!enabled.has(id); });
 }
 
 function startCaseAt(ts){
@@ -447,9 +399,7 @@ function setLoc(btn,loc){
   btn.classList.add('active');
   if(ablyClient) connectAbly();
   if(startTs) enableButtonsForLoc(loc);
-  if(!startTs){
-    document.getElementById('btn-act').disabled = !(loc==='ER' || loc==='Ward');
-  }
+  if(!startTs) document.getElementById('btn-act').disabled = !(loc==='ER' || loc==='Ward');
 }
 
 function pad(n){return String(n).padStart(2,'0');}
@@ -459,13 +409,9 @@ function fmtMs(ms){
   return h>0?`${pad(h)}:${pad(m)}:${pad(sc)}`:`${pad(m)}:${pad(sc)}`;
 }
 
-/* Activate */
 function activate(){
   if(startTs) return;
-  if(!(appLoc==='ER' || appLoc==='Ward')){
-    addLog('alert','⚠️','Activate ทำได้เฉพาะ ER หรือ Ward เท่านั้น',null,null);
-    return;
-  }
+  if(!(appLoc==='ER' || appLoc==='Ward')){ addLog('alert','⚠️','Activate ทำได้เฉพาะ ER หรือ Ward เท่านั้น',null,null); return; }
   const ts = Date.now();
   startCaseAt(ts);
   enableButtonsForLoc(appLoc);
@@ -475,26 +421,19 @@ function activate(){
   publish('activate', { startTs: ts });
 }
 
-/* doAction */
 function doAction(action){
   const def=ACTIONS[action];
   if(!def) return;
-  if(!startTs){
-    addLog('alert','⚠️','ยังไม่มีเคสที่ถูก Activate',null,null);
-    return;
-  }
+  if(!startTs){ addLog('alert','⚠️','ยังไม่มีเคสที่ถูก Activate',null,null); return; }
   const delta=Date.now()-startTs;
-
-  if(def.btnId){ document.getElementById(def.btnId).classList.add('stamped'); }
-  if(def.tsId) { document.getElementById(def.tsId).textContent=timeNow(); }
-
+  if(def.btnId) document.getElementById(def.btnId).classList.add('stamped');
+  if(def.tsId)  document.getElementById(def.tsId).textContent=timeNow();
   window[def.playFn]();
   speak(def.speech,350);
   addLog(def.logType,def.icon,def.label,delta,null);
   publish(action);
 }
 
-/* Tick */
 function tick(){
   const el=Date.now()-startTs, min=Math.floor(el/60000);
   const t=document.getElementById('timer');
@@ -505,12 +444,11 @@ function tick(){
   checkMilestones(min,el);
 }
 
-/* Milestones */
 const MS=[
-  {m:20,id:'m20',speech:'20 minutes. Stroke Fast Track.',                        label:'ครบ 20 นาที',red:false},
-  {m:30,id:'m30',speech:'30 minutes. Please check door to needle time.',         label:'ครบ 30 นาที',red:false},
-  {m:45,id:'m45',speech:'45 minutes. Stroke Fast Track.',                        label:'ครบ 45 นาที',red:false},
-  {m:60,id:'m60',speech:'60 minutes. Exceeding door to needle target.',          label:'ครบ 60 นาที',red:true },
+  {m:20,id:'m20',speech:'20 minutes. Stroke Fast Track.',                  label:'ครบ 20 นาที',red:false},
+  {m:30,id:'m30',speech:'30 minutes. Please check door to needle time.',   label:'ครบ 30 นาที',red:false},
+  {m:45,id:'m45',speech:'45 minutes. Stroke Fast Track.',                  label:'ครบ 45 นาที',red:false},
+  {m:60,id:'m60',speech:'60 minutes. Exceeding door to needle target.',    label:'ครบ 60 นาที',red:true },
 ];
 function checkMilestones(min,el){
   MS.forEach(d=>{
@@ -526,19 +464,12 @@ function checkMilestones(min,el){
   });
 }
 
-/* Log */
 const logData = [];
-
-function fmtDelta(ms){
-  if(ms==null) return '';
-  return `+${Math.floor(ms/60000)}m ${Math.floor((ms%60000)/1000)}s`;
-}
+function fmtDelta(ms){ if(ms==null) return ''; return `+${Math.floor(ms/60000)}m ${Math.floor((ms%60000)/1000)}s`; }
 
 function addLog(type,icon,msg,deltaMs,from){
   const ts = timeNow();
-  const entry = { ts, type, icon, msg, deltaMs, from: from||null };
-  logData.unshift(entry);
-
+  logData.unshift({ ts, type, icon, msg, deltaMs, from: from||null });
   const log=document.getElementById('log');
   const e=document.createElement('div');
   e.className=`log-entry ${type}`;
@@ -553,17 +484,11 @@ function renderSummary(){
   const wrap = document.getElementById('summary-wrap');
   if(logData.length===0){ wrap.style.display='none'; return; }
   wrap.style.display='block';
-
   const rows = [...logData].reverse();
-  let html = `<table class="sum-table">
-    <thead><tr><th>เวลา</th><th>รายการ</th><th>Delta</th></tr></thead><tbody>`;
+  let html = `<table class="sum-table"><thead><tr><th>เวลา</th><th>รายการ</th><th>Delta</th></tr></thead><tbody>`;
   rows.forEach(r=>{
     const from = r.from ? `<div class="sum-from">📡 ${r.from}</div>` : '';
-    html += `<tr>
-      <td>${r.ts}</td>
-      <td>${r.icon} ${r.msg}${from}</td>
-      <td>${fmtDelta(r.deltaMs)}</td>
-    </tr>`;
+    html += `<tr><td>${r.ts}</td><td>${r.icon} ${r.msg}${from}</td><td>${fmtDelta(r.deltaMs)}</td></tr>`;
   });
   html += '</tbody></table>';
   document.getElementById('summary-table').innerHTML = html;
@@ -573,9 +498,7 @@ function copyLog(){
   if(logData.length===0){ alert('ยังไม่มีข้อมูล'); return; }
   const rows = [...logData].reverse();
   const lines = ['เวลา	รายการ	Delta	จาก'];
-  rows.forEach(r=>{
-    lines.push([r.ts, `${r.icon} ${r.msg}`, fmtDelta(r.deltaMs)||'-', r.from||'-'].join('	'));
-  });
+  rows.forEach(r=>{ lines.push([r.ts, `${r.icon} ${r.msg}`, fmtDelta(r.deltaMs)||'-', r.from||'-'].join('	')); });
   navigator.clipboard.writeText(lines.join('\n')).then(()=>{
     const btn = document.getElementById('btn-copy');
     btn.textContent = '✅ Copied!';
@@ -590,19 +513,16 @@ function downloadCSV(){
   const lines = rows.map(r=>{
     const min = r.deltaMs!=null ? Math.floor(r.deltaMs/60000) : '';
     const sec = r.deltaMs!=null ? Math.floor((r.deltaMs%60000)/1000) : '';
-    const msg = r.msg.replace(/,/g,' ');
-    return `${r.ts},"${r.icon} ${msg}",${min},${sec},${r.from||''},${r.type}`;
+    return `${r.ts},"${r.icon} ${r.msg.replace(/,/g,' ')}",${min},${sec},${r.from||''},${r.type}`;
   });
   const csv = [header, ...lines].join('\n');
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const dateStr = new Date().toISOString().slice(0,10);
-  a.href=url; a.download=`stroke-fast-track-${dateStr}.csv`;
+  a.href=url; a.download=`stroke-fast-track-${new Date().toISOString().slice(0,10)}.csv`;
   a.click(); URL.revokeObjectURL(url);
 }
 
-/* Reset */
 function resetAll(){
   if(startTs&&!confirm('รีเซ็ตและล้างข้อมูลทั้งหมด?')) return;
   clearInterval(ticker); startTs=null; ticker=null;
@@ -622,35 +542,20 @@ function resetAll(){
   synth.cancel();
 }
 
-/* ═══════════════════════════════════════════
-   STARTUP
-═══════════════════════════════════════════ */
 async function startApp(){
   const code = document.getElementById('shift-code-input').value.trim();
   const errEl = document.getElementById('code-error');
   if(!code){ errEl.textContent='กรุณาใส่รหัสเข้าจับเวลา'; return; }
   errEl.textContent='';
-
   const btn = document.querySelector('.btn-unlock');
   btn.textContent='กำลังตรวจสอบ...'; btn.disabled=true;
   try{
     const res = await fetch(`/api/ably-token?code=${encodeURIComponent(code)}`);
-    if(res.status===401){
-      errEl.textContent='❌ รหัสไม่ถูกต้อง';
-      btn.textContent='เริ่มใช้งาน'; btn.disabled=false;
-      return;
-    }
-    if(res.status===403){
-      errEl.textContent='❌ ไม่อนุญาตให้เข้าถึง';
-      btn.textContent='เริ่มใช้งาน'; btn.disabled=false;
-      return;
-    }
+    if(res.status===401){ errEl.textContent='❌ รหัสไม่ถูกต้อง'; btn.textContent='เริ่มใช้งาน'; btn.disabled=false; return; }
+    if(res.status===403){ errEl.textContent='❌ ไม่อนุญาตให้เข้าถึง'; btn.textContent='เริ่มใช้งาน'; btn.disabled=false; return; }
   } catch(e){
-    errEl.textContent='❌ เชื่อมต่อ server ไม่ได้';
-    btn.textContent='เริ่มใช้งาน'; btn.disabled=false;
-    return;
+    errEl.textContent='❌ เชื่อมต่อ server ไม่ได้'; btn.textContent='เริ่มใช้งาน'; btn.disabled=false; return;
   }
-
   shiftCode = code;
   ctx(); synth.getVoices();
   beep(880,.08,'sine',0,.25);
@@ -659,39 +564,32 @@ async function startApp(){
 }
 
 /* ═══════════════════════════════════════════
-   QR TOKEN MAP — token ใน URL → dept + auto-login
-   token ต้องตรงกับ QR_TOKENS env var ใน Cloudflare
+   QR TOKEN MAP (2026)
+   ต้องตรงกับ QR_TOKENS env var ใน Cloudflare:
+   PRH_ER_2026,PRH_WD_2026,PRH_CT_2026,PRH_LB_2026
 ═══════════════════════════════════════════ */
 const QR_DEPT_MAP = {
-  'PRH_ER_2025':  'ER',
-  'PRH_WD_2025':  'Ward',
-  'PRH_CT_2025':  'CT',
-  'PRH_LB_2025':  'LAB',
+  'PRH_ER_2026': 'ER',
+  'PRH_WD_2026': 'Ward',
+  'PRH_CT_2026': 'CT',
+  'PRH_LB_2026': 'LAB',
 };
 
 window.addEventListener('load', () => {
   document.getElementById('btn-act').disabled = !(appLoc === 'ER' || appLoc === 'Ward');
 
-  // ── ตรวจ QR token ใน URL ──────────────────────────────────────────
   const urlToken = new URLSearchParams(window.location.search).get('token');
   const dept = urlToken ? QR_DEPT_MAP[urlToken] : null;
 
   if (dept) {
-    // 1. ตั้ง dept ตาม QR
     appLoc = dept;
     document.querySelectorAll('.loc-btn').forEach(b => b.classList.remove('active'));
     const deptBtn = [...document.querySelectorAll('.loc-btn')]
       .find(b => (b.getAttribute('onclick') || '').includes(`'${dept}'`));
     if (deptBtn) deptBtn.classList.add('active');
     document.getElementById('btn-act').disabled = !(dept === 'ER' || dept === 'Ward');
-
-    // 2. ใส่ token ลง input แล้ว auto-login
     document.getElementById('shift-code-input').value = urlToken;
-
-    // 3. ลบ token ออกจาก URL bar (ไม่ให้ปรากฏใน history/screenshot)
     history.replaceState({}, '', window.location.pathname);
-
-    // 4. เรียก startApp() อัตโนมัติ
     startApp();
   } else {
     document.getElementById('shift-code-input').focus();
