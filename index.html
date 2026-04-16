@@ -36,6 +36,28 @@ body{display:flex;flex-direction:column;align-items:center;
   animation:pb 1.6s ease-in-out infinite;width:100%;max-width:340px;}
 @keyframes pb{0%,100%{box-shadow:0 0 0 0 var(--red-glow)}50%{box-shadow:0 0 0 14px transparent}}
 
+/* delay checklist modal */
+.modal{position:fixed;inset:0;background:rgba(10,10,15,.92);z-index:1000;
+  display:none;align-items:center;justify-content:center;padding:18px;}
+.modal.show{display:flex;}
+.modal-card{width:100%;max-width:520px;background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:16px;}
+.modal-title{font-size:16px;font-weight:700;color:#fff;margin-bottom:6px;}
+.modal-desc{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px;}
+.modal-section{padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);margin-bottom:10px;}
+.modal-section h3{font-size:13px;color:#fff;margin-bottom:8px;}
+.chk-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text);}
+.chk input{margin-top:2px;accent-color:var(--red);}
+.modal-note{width:100%;background:#1a1a2a;border:1px solid #2a2a4a;border-radius:10px;
+  padding:10px 12px;color:#fff;font-family:inherit;font-size:13px;resize:none;min-height:54px;}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap;}
+.btn-primary{background:var(--red);border:none;color:#fff;padding:10px 14px;border-radius:10px;
+  font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.btn-ghost{background:transparent;border:1px solid #2a2a3a;color:var(--muted);
+  padding:10px 14px;border-radius:10px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.btn-primary:disabled{background:#3a1a1a;color:#7a4040;cursor:not-allowed;}
+
 /* connection badge */
 .conn-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);}
 .conn-dot{width:8px;height:8px;border-radius:50%;background:#555;flex-shrink:0;transition:background .3s;}
@@ -107,8 +129,23 @@ body{display:flex;flex-direction:column;align-items:center;
 .lab-result-btn.stamped{border-color:#f57f17;background:rgba(245,127,23,.18);color:#ffcc02;}
 .admit-btn.stamped     {border-color:#2e7d32;background:rgba(46,125,50,.2);color:#a5d6a7;}
 .refer-btn.stamped     {border-color:#c62828;background:rgba(198,40,40,.2);color:#ef9a9a;}
+.decision-btn:not(:disabled):hover{border-color:#00838f;background:rgba(0,131,143,.15);}
+.decision-btn.stamped  {border-color:#00838f;background:rgba(0,131,143,.2);color:#80deea;}
 .ts-small{font-size:11px;font-weight:400;color:var(--muted);}
 
+/* door-to metrics */
+.metrics-wrap{margin-top:16px;border-top:1px solid var(--border);padding-top:14px;}
+.metrics-title{font-size:11px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;}
+.metric-row{display:flex;justify-content:space-between;align-items:center;
+  padding:9px 12px;border-radius:8px;background:rgba(255,255,255,.04);margin-bottom:6px;}
+.metric-label{font-size:13px;color:var(--text);}
+.metric-sub{font-size:11px;color:var(--muted);}
+.metric-val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--amber);}
+.metric-val.miss{color:var(--red);}
+.metric-val.ok{color:var(--green);}
+.metric-val.pending{color:var(--muted);font-size:12px;font-weight:400;}
+
+/* incoming flash */
 @keyframes flash{0%{background:rgba(255,179,0,.25)}100%{background:transparent}}
 .incoming{animation:flash .8s ease-out 3;}
 
@@ -157,6 +194,21 @@ body{display:flex;flex-direction:column;align-items:center;
   <h1><span class="dot"></span> Stroke Fast Track <span class="dot"></span></h1>
 </div>
 
+<!-- Delay checklist modal (shown only when over target) -->
+<div class="modal" id="delay-modal" role="dialog" aria-modal="true" aria-labelledby="delay-title">
+  <div class="modal-card">
+    <div class="modal-title" id="delay-title">⏱ เกินเวลาเป้าหมาย</div>
+    <div class="modal-desc">ช่วยเลือกเหตุผลแบบสั้นๆ (เลือกได้หลายข้อ) แล้วกดบันทึก ระบบจะเก็บลงฐานข้อมูลเพื่อวิเคราะห์ปรับปรุง</div>
+    <div id="delay-sections"></div>
+    <textarea class="modal-note" id="delay-note" maxlength="120" placeholder="หมายเหตุเพิ่มเติม (ไม่เกิน 120 ตัวอักษร)"></textarea>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="delay-skip" type="button">ข้าม</button>
+      <button class="btn-primary" id="delay-submit" type="button">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- Card 1: location + controls -->
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
     <div class="conn-row">
@@ -225,6 +277,12 @@ body{display:flex;flex-direction:column;align-items:center;
       <span>LAB ผลออกแล้ว<br/><small style="font-size:11px;font-weight:400">ได้รับผลเลือด</small></span>
       <span class="ts-small" id="lab-result-ts"></span>
     </button>
+    <button class="action-btn decision-btn" id="btn-decision" onclick="doAction('decision')" disabled
+      style="grid-column:1/-1;">
+      <span class="icon">✅</span>
+      <span>Decision — rtPA / Thrombectomy<br/><small style="font-size:11px;font-weight:400">ตัดสินใจให้ยา/ส่ง thrombectomy</small></span>
+      <span class="ts-small" id="decision-ts"></span>
+    </button>
     <button class="action-btn admit-btn" id="btn-admit" onclick="doAction('admit')" disabled>
       <span class="icon">🛏️</span>
       <span>Admit<br/><small style="font-size:11px;font-weight:400">รับไว้รักษา</small></span>
@@ -263,6 +321,7 @@ const ACTIONS = {
   lab_result: { icon:'📋', label:'LAB ผลออกแล้ว',             btnId:'btn-lab-result',  tsId:'lab-result-ts',   logType:'lab',      speech:'Lab results available. Stroke Fast Track.',playFn:'playLAB'       },
   admit:      { icon:'🛏️', label:'Admit รับไว้รักษา',         btnId:'btn-admit',       tsId:'admit-ts',        logType:'activate', speech:'Patient admitted. Stroke Fast Track complete.', playFn:'playAdmit' },
   refer:      { icon:'🚑', label:'Refer ส่งต่อผู้ป่วย',        btnId:'btn-refer',       tsId:'refer-ts',        logType:'alert',    speech:'Patient referred. Stroke Fast Track complete.', playFn:'playRefer' },
+  decision:   { icon:'✅', label:'Decision — rtPA / Thrombectomy', btnId:'btn-decision', tsId:'decision-ts',  logType:'activate', speech:'Decision made. Stroke Fast Track.',           playFn:'playAdmit'  },
 };
 
 let _ctx = null, appVol = 1;
@@ -353,12 +412,17 @@ function connectAbly(){
       window[def.playFn]();
       speak(def.speech, 400);
       addLog('remote', def.icon, `${def.label}`, d.delta, from);
+      // save remote event (approximate absolute ts)
+      const tsMs = (startTs && typeof d.delta === 'number') ? (startTs + d.delta) : Date.now();
+      saveEventToDb(d.action, tsMs, (typeof d.delta==='number'? d.delta : null), from);
       document.querySelectorAll('.card').forEach(c=>{ c.classList.add('incoming'); setTimeout(()=>c.classList.remove('incoming'),2500); });
     }
     if(d.action==='milestone'){
       playMilestone(d.isRed);
       speak(d.speech, 400);
       addLog('alert','⏰',d.label, null, from);
+      const tsMs = Date.now();
+      saveEventToDb('milestone', tsMs, null, from);
     }
   });
 }
@@ -370,6 +434,161 @@ function publish(action, extraData){
   channel.publish('event', { action, from: appLoc, delta, speech: def?.speech, ...extraData });
 }
 
+async function apiPost(path, data){
+  try{
+    const res = await fetch(path, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(data),
+    });
+    return res.ok;
+  }catch(e){
+    return false;
+  }
+}
+
+function getCaseId(){
+  return startTs ? String(startTs) : '';
+}
+
+function saveEventToDb(action, tsMs, deltaMs, from){
+  const caseId = getCaseId();
+  if(!caseId || !shiftCode) return;
+  apiPost('/api/event', {
+    code: shiftCode,
+    caseId,
+    startTs,
+    action,
+    tsMs,
+    deltaMs,
+    loc: appLoc,
+    from: from || appLoc,
+  });
+}
+
+function metricValueMs(metric){
+  if(!startTs) return null;
+  if(metric==='door_to_ct') return tsMap.ct_result ? (tsMap.ct_result - startTs) : null;
+  if(metric==='door_to_decision') return tsMap.decision ? (tsMap.decision - startTs) : null;
+  if(metric==='door_to_refer') return tsMap.refer ? (tsMap.refer - startTs) : null;
+  return null;
+}
+
+function overTargetMetrics(){
+  const out = [];
+  const vCt = metricValueMs('door_to_ct');
+  if(vCt!=null && vCt > TARGETS.door_to_ct) out.push({ metric:'door_to_ct', valueMs:vCt, targetMs:TARGETS.door_to_ct });
+  const vDec = metricValueMs('door_to_decision');
+  if(vDec!=null && vDec > TARGETS.door_to_decision) out.push({ metric:'door_to_decision', valueMs:vDec, targetMs:TARGETS.door_to_decision });
+  // door_to_refer ไม่มี target default (เอาไว้เก็บได้ถ้าต้องการในอนาคต)
+  return out;
+}
+
+function metricTitle(metric){
+  if(metric==='door_to_ct') return 'Door-to-CT (T1 − T0)';
+  if(metric==='door_to_decision') return 'Door-to-Decision (T2 − T0)';
+  if(metric==='door_to_refer') return 'Door-to-Refer (T3 − T0)';
+  return metric;
+}
+
+function fmtMinSec(ms){
+  const min = Math.floor(ms/60000);
+  const sec = Math.floor((ms%60000)/1000);
+  return `${min}m ${sec}s`;
+}
+
+function buildDelaySections(metrics){
+  const box = document.getElementById('delay-sections');
+  box.innerHTML = '';
+  metrics.forEach(m=>{
+    const sec = document.createElement('div');
+    sec.className = 'modal-section';
+    const heading = document.createElement('h3');
+    heading.textContent = `${metricTitle(m.metric)} = ${fmtMinSec(m.valueMs)} (เป้า ${fmtMinSec(m.targetMs)})`;
+    sec.appendChild(heading);
+
+    const grid = document.createElement('div');
+    grid.className = 'chk-grid';
+    DELAY_REASONS.forEach(r=>{
+      const id = `chk-${m.metric}-${r.id}`;
+      const label = document.createElement('label');
+      label.className = 'chk';
+      label.innerHTML = `<input type="checkbox" id="${id}" data-metric="${m.metric}" data-reason="${r.id}"/><span>${r.label}</span>`;
+      grid.appendChild(label);
+    });
+    sec.appendChild(grid);
+    box.appendChild(sec);
+  });
+}
+
+function openDelayModal(metrics){
+  if(_delayModalOpen) return;
+  _delayModalOpen = true;
+  buildDelaySections(metrics);
+  document.getElementById('delay-note').value = '';
+  document.getElementById('delay-modal').classList.add('show');
+
+  const submitBtn = document.getElementById('delay-submit');
+  const skipBtn = document.getElementById('delay-skip');
+  submitBtn.disabled = false;
+
+  const close = ()=>{
+    document.getElementById('delay-modal').classList.remove('show');
+    _delayModalOpen = false;
+  };
+
+  skipBtn.onclick = ()=>{
+    const caseId = getCaseId();
+    if(caseId) localStorage.setItem(`delayChecklistDone:${caseId}`, '1');
+    close();
+  };
+
+  submitBtn.onclick = async ()=>{
+    submitBtn.disabled = true;
+    const note = document.getElementById('delay-note').value.trim().slice(0,120);
+    const picked = {};
+    document.querySelectorAll('#delay-sections input[type="checkbox"]').forEach(el=>{
+      if(!el.checked) return;
+      const metric = el.getAttribute('data-metric');
+      const reason = el.getAttribute('data-reason');
+      if(!picked[metric]) picked[metric] = [];
+      picked[metric].push(reason);
+    });
+
+    const payload = metrics.map(m=>({
+      metric: m.metric,
+      valueMs: m.valueMs,
+      targetMs: m.targetMs,
+      reasons: picked[m.metric] || [],
+      note,
+    }));
+
+    const ok = await apiPost('/api/delay', {
+      code: shiftCode,
+      caseId: getCaseId(),
+      startTs,
+      loc: appLoc,
+      metrics: payload,
+    });
+
+    const caseId = getCaseId();
+    if(caseId) localStorage.setItem(`delayChecklistDone:${caseId}`, '1');
+    if(!ok){
+      addLog('alert','⚠️','บันทึกเหตุผลลงฐานข้อมูลไม่สำเร็จ (ลองใหม่ได้)',null,null);
+    }
+    close();
+  };
+}
+
+function maybeAskDelayChecklist(){
+  const caseId = getCaseId();
+  if(!caseId) return;
+  if(localStorage.getItem(`delayChecklistDone:${caseId}`)==='1') return;
+  const over = overTargetMetrics();
+  if(over.length===0) return;
+  openDelayModal(over);
+}
+
 function setConn(state, label){
   document.getElementById('conn-dot').className='conn-dot'+(state?' '+state:'');
   document.getElementById('conn-label').textContent=label;
@@ -377,10 +596,34 @@ function setConn(state, label){
 
 let startTs=null, ticker=null, appLoc='ER', shiftCode='';
 let mHit={20:false,30:false,45:false,60:false};
+// T0=ER arrival(startTs) T1=CT done T2=Decision T3=Refer
+let tsMap={ ct_result:null, decision:null, refer:null };
+let _delayModalOpen = false;
+
+const TARGETS = {
+  door_to_ct: 25 * 60 * 1000,
+  door_to_decision: 60 * 60 * 1000,
+};
+
+const DELAY_REASONS = [
+  { id: 'ct_queue',      label: 'คิว CT / เครื่องไม่พร้อม' },
+  { id: 'transport',     label: 'รอเปล/พาไป CT' },
+  { id: 'lab_wait',      label: 'รอผล LAB' },
+  { id: 'consult_wait',  label: 'รอ consult/ตัดสินใจ' },
+  { id: 'workflow',      label: 'ขั้นตอน/เอกสาร/ระบบ' },
+  { id: 'family_delay',  label: 'รอญาติ/การยินยอม' },
+  { id: 'unknown_onset', label: 'เวลา onset ไม่ชัด' },
+  { id: 'other',         label: 'อื่นๆ' },
+];
 
 function enableButtonsForLoc(loc){
-  const all = ['btn-ct','btn-lab','btn-ct-result','btn-lab-result','btn-admit','btn-refer'];
-  const enableMap = { ER:all, Ward:all, LAB:['btn-lab','btn-lab-result'], CT:['btn-ct','btn-ct-result'] };
+  const all = ['btn-ct','btn-lab','btn-ct-result','btn-lab-result','btn-admit','btn-refer','btn-decision'];
+  const enableMap = {
+    ER:   all,
+    Ward: all,
+    LAB:  ['btn-lab','btn-lab-result'],
+    CT:   ['btn-ct','btn-ct-result'],
+  };
   const enabled = new Set(enableMap[loc] || all);
   all.forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=!enabled.has(id); });
 }
@@ -419,19 +662,40 @@ function activate(){
   speak(`Stroke Fast Track activated at ${appLoc}.`,700);
   addLog('activate','🚨',`Activate — ${appLoc}`,null,null);
   publish('activate', { startTs: ts });
+  // บันทึกลงฐานข้อมูล (caseId = startTs)
+  saveEventToDb('activate', ts, null, appLoc);
 }
 
 function doAction(action){
   const def=ACTIONS[action];
   if(!def) return;
-  if(!startTs){ addLog('alert','⚠️','ยังไม่มีเคสที่ถูก Activate',null,null); return; }
-  const delta=Date.now()-startTs;
-  if(def.btnId) document.getElementById(def.btnId).classList.add('stamped');
-  if(def.tsId)  document.getElementById(def.tsId).textContent=timeNow();
+  if(!startTs){
+    addLog('alert','⚠️','ยังไม่มีเคสที่ถูก Activate',null,null);
+    return;
+  }
+  const now=Date.now();
+  const delta=now-startTs;
+
+  // บันทึก timestamp จุดสำคัญ
+  if(action==='ct_result' && !tsMap.ct_result) tsMap.ct_result=now;
+  if(action==='decision'  && !tsMap.decision)  tsMap.decision=now;
+  if(action==='refer'     && !tsMap.refer)      tsMap.refer=now;
+
+  if(def.btnId){ document.getElementById(def.btnId).classList.add('stamped'); }
+  if(def.tsId) { document.getElementById(def.tsId).textContent=timeNow(); }
+
   window[def.playFn]();
   speak(def.speech,350);
   addLog(def.logType,def.icon,def.label,delta,null);
   publish(action);
+
+  // save event
+  saveEventToDb(action, now, delta, appLoc);
+
+  // ถ้าจบเคสแล้วและเกินเป้า ให้ถาม checklist
+  if(action==='admit' || action==='refer'){
+    setTimeout(maybeAskDelayChecklist, 150);
+  }
 }
 
 function tick(){
@@ -491,7 +755,41 @@ function renderSummary(){
     html += `<tr><td>${r.ts}</td><td>${r.icon} ${r.msg}${from}</td><td>${fmtDelta(r.deltaMs)}</td></tr>`;
   });
   html += '</tbody></table>';
+
+  // Door-to metrics
+  html += renderMetrics();
+
   document.getElementById('summary-table').innerHTML = html;
+}
+
+function renderMetrics(){
+  if(!startTs) return '';
+
+  function metricRow(label, sub, tsVal, targetMin){
+    if(!tsVal){
+      return `<div class="metric-row">
+        <div><div class="metric-label">${label}</div><div class="metric-sub">${sub}</div></div>
+        <div class="metric-val pending">— ยังไม่ถึงจุดนี้</div>
+      </div>`;
+    }
+    const ms = tsVal - startTs;
+    const min = Math.floor(ms/60000);
+    const sec = Math.floor((ms%60000)/1000);
+    const display = `${min}m ${sec}s`;
+    const cls = targetMin ? (min < targetMin ? 'ok' : 'miss') : '';
+    const hint = targetMin ? (min < targetMin ? ` ✓ &lt;${targetMin}m` : ` ✗ เกิน ${targetMin}m`) : '';
+    return `<div class="metric-row">
+      <div><div class="metric-label">${label}</div><div class="metric-sub">${sub}</div></div>
+      <div class="metric-val ${cls}">${display}${hint}</div>
+    </div>`;
+  }
+
+  return `<div class="metrics-wrap">
+    <div class="metrics-title">⏱ Door-to Times (จาก T0 ER Arrival)</div>
+    ${metricRow('Door-to-CT','T1 − T0 &nbsp;|&nbsp; CT done', tsMap.ct_result, 25)}
+    ${metricRow('Door-to-Decision','T2 − T0 &nbsp;|&nbsp; rtPA / Thrombectomy', tsMap.decision, 60)}
+    ${metricRow('Door-to-Refer','T3 − T0 &nbsp;|&nbsp; Refer out', tsMap.refer, null)}
+  </div>`;
 }
 
 function copyLog(){
@@ -527,13 +825,14 @@ function resetAll(){
   if(startTs&&!confirm('รีเซ็ตและล้างข้อมูลทั้งหมด?')) return;
   clearInterval(ticker); startTs=null; ticker=null;
   mHit={20:false,30:false,45:false,60:false};
+  tsMap={ ct_result:null, decision:null, refer:null };
   document.getElementById('timer').textContent='00:00';
   document.getElementById('timer').className='timer';
   document.getElementById('timer-label').textContent='กดปุ่ม Activate เพื่อเริ่มจับเวลา';
   document.getElementById('btn-act').disabled=false;
-  ['btn-ct','btn-lab','btn-ct-result','btn-lab-result','btn-admit','btn-refer']
+  ['btn-ct','btn-lab','btn-ct-result','btn-lab-result','btn-admit','btn-refer','btn-decision']
     .forEach(id=>{const el=document.getElementById(id);el.disabled=true;el.classList.remove('stamped');});
-  ['ct-ts','lab-ts','ct-result-ts','lab-result-ts','admit-ts','refer-ts']
+  ['ct-ts','lab-ts','ct-result-ts','lab-result-ts','admit-ts','refer-ts','decision-ts']
     .forEach(id=>document.getElementById(id).textContent='');
   document.getElementById('log').innerHTML='';
   logData.length=0;

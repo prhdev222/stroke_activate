@@ -1,7 +1,11 @@
 {
   "name": "stroke-timer",
   "version": "1.0.1",
+  "type": "module",
   "scripts": {
     "dev": "wrangler pages dev . --port 8788"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.15"
   }
 }
