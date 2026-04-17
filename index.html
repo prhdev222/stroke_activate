@@ -897,6 +897,7 @@ window.addEventListener('load', () => {
   const params   = new URLSearchParams(window.location.search);
   const urlToken = params.get('token');
   const urlRoom  = params.get('room');
+  const presetRoom = window.__PRESET_ROOM__ || '';   // inject โดย /er /ward /ct /lab function
 
   const knownRooms = ['ER', 'Ward', 'CT', 'LAB'];
 
@@ -904,8 +905,11 @@ window.addEventListener('load', () => {
     /* เข้าผ่าน QR / token เดิม */
     activateDept(QR_DEPT_MAP[urlToken], urlToken);
   } else if (urlRoom && knownRooms.includes(urlRoom)) {
-    /* เข้าผ่าน LINE /?room=ER — ไม่มีรหัสเลย */
+    /* เข้าผ่าน /?room=ER */
     activateDept(urlRoom, '');
+  } else if (presetRoom && knownRooms.includes(presetRoom)) {
+    /* เข้าผ่าน /er /ward /ct /lab — ไม่มี redirect ไม่มีรหัส */
+    activateDept(presetRoom, '');
   } else {
     document.getElementById('shift-code-input').focus();
   }

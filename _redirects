@@ -1,4 +1,1 @@
-/er     /?room=ER      302
-/ward   /?room=Ward    302
-/ct     /?room=CT      302
-/lab    /?room=LAB     302
+# short URL rules ถูกแทนที่ด้วย Cloudflare Pages Functions แล้ว (functions/er.js ฯลฯ)
