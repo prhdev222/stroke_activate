@@ -387,8 +387,11 @@ const CHANNEL = 'stroke-fast-track';
 
 function connectAbly(){
   if(ablyClient){ try{ ablyClient.close(); }catch(e){} }
+  const authQuery = shiftCode
+    ? `code=${encodeURIComponent(shiftCode)}&clientId=${encodeURIComponent(appLoc)}`
+    : `room=${encodeURIComponent(appLoc)}`;
   ablyClient = new Ably.Realtime({
-    authUrl: `/api/ably-token?code=${encodeURIComponent(shiftCode)}&clientId=${encodeURIComponent(appLoc)}`,
+    authUrl: `/api/ably-token?${authQuery}`,
     clientId: appLoc,
   });
   ablyClient.connection.on('connected', ()=>{ setConn('online', '🟢 เชื่อมต่อแล้ว — ' + appLoc); });
@@ -874,25 +877,35 @@ const QR_DEPT_MAP = {
   'PRH_LB_2026': 'LAB',
 };
 
+function activateDept(dept, code = '') {
+  appLoc = dept;
+  document.querySelectorAll('.loc-btn').forEach(b => b.classList.remove('active'));
+  const deptBtn = [...document.querySelectorAll('.loc-btn')]
+    .find(b => (b.getAttribute('onclick') || '').includes(`'${dept}'`));
+  if (deptBtn) deptBtn.classList.add('active');
+  document.getElementById('btn-act').disabled = !(dept === 'ER' || dept === 'Ward');
+  shiftCode = code;
+  ctx(); synth.getVoices();
+  document.getElementById('overlay').style.display = 'none';
+  history.replaceState({}, '', window.location.pathname);
+  connectAbly();
+}
+
 window.addEventListener('load', () => {
   document.getElementById('btn-act').disabled = !(appLoc === 'ER' || appLoc === 'Ward');
 
-  const urlToken = new URLSearchParams(window.location.search).get('token');
-  const dept = urlToken ? QR_DEPT_MAP[urlToken] : null;
+  const params   = new URLSearchParams(window.location.search);
+  const urlToken = params.get('token');
+  const urlRoom  = params.get('room');
 
-  if (dept) {
-    appLoc = dept;
-    document.querySelectorAll('.loc-btn').forEach(b => b.classList.remove('active'));
-    const deptBtn = [...document.querySelectorAll('.loc-btn')]
-      .find(b => (b.getAttribute('onclick') || '').includes(`'${dept}'`));
-    if (deptBtn) deptBtn.classList.add('active');
-    document.getElementById('btn-act').disabled = !(dept === 'ER' || dept === 'Ward');
-    history.replaceState({}, '', window.location.pathname);
-    /* ข้ามหน้าใส่รหัส — token ถูกต้องแน่นอน (อยู่ใน QR_DEPT_MAP) */
-    shiftCode = urlToken;
-    ctx(); synth.getVoices();
-    document.getElementById('overlay').style.display = 'none';
-    connectAbly();
+  const knownRooms = ['ER', 'Ward', 'CT', 'LAB'];
+
+  if (urlToken && QR_DEPT_MAP[urlToken]) {
+    /* เข้าผ่าน QR / token เดิม */
+    activateDept(QR_DEPT_MAP[urlToken], urlToken);
+  } else if (urlRoom && knownRooms.includes(urlRoom)) {
+    /* เข้าผ่าน LINE /?room=ER — ไม่มีรหัสเลย */
+    activateDept(urlRoom, '');
   } else {
     document.getElementById('shift-code-input').focus();
   }

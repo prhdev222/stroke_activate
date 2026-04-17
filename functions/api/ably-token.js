@@ -28,6 +28,7 @@ export async function onRequest(context) {
   const url      = new URL(request.url);
   const sentCode = url.searchParams.get('code') || '';
   const clientId = url.searchParams.get('clientId') || '';
+  const openRoom = url.searchParams.get('room')  || ''; // เข้าตรงโดยไม่มี code
   const roomCode = env.ROOM_CODE || '';
 
   // QR_TOKENS = comma-separated list ของ token ที่ฝังใน QR Code
@@ -36,9 +37,12 @@ export async function onRequest(context) {
     .map(t => t.trim())
     .filter(Boolean);
 
-  const isValid = !roomCode                     // dev mode (ไม่ตั้ง env)
-    || sentCode === roomCode                    // รหัสกะปกติ
-    || qrTokens.includes(sentCode);            // QR token
+  const knownRooms = ['ER', 'Ward', 'CT', 'LAB'];
+
+  const isValid = !roomCode                          // dev mode (ไม่ตั้ง env)
+    || sentCode === roomCode                         // รหัสกะปกติ
+    || qrTokens.includes(sentCode)                  // QR token
+    || (originOk && knownRooms.includes(openRoom)); // เข้าตรงผ่าน LINE (ไม่มี code)
 
   if (!isValid) {
     await new Promise(r => setTimeout(r, 600)); // ชะลอ brute force
@@ -78,7 +82,7 @@ export async function onRequest(context) {
     keyName,
     ttl,
     capability,
-    clientId: clientId || undefined,
+    clientId: clientId || openRoom || undefined,
     timestamp,
     nonce,
   };
