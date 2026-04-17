@@ -887,9 +887,12 @@ window.addEventListener('load', () => {
       .find(b => (b.getAttribute('onclick') || '').includes(`'${dept}'`));
     if (deptBtn) deptBtn.classList.add('active');
     document.getElementById('btn-act').disabled = !(dept === 'ER' || dept === 'Ward');
-    document.getElementById('shift-code-input').value = urlToken;
     history.replaceState({}, '', window.location.pathname);
-    startApp();
+    /* ข้ามหน้าใส่รหัส — token ถูกต้องแน่นอน (อยู่ใน QR_DEPT_MAP) */
+    shiftCode = urlToken;
+    ctx(); synth.getVoices();
+    document.getElementById('overlay').style.display = 'none';
+    connectAbly();
   } else {
     document.getElementById('shift-code-input').focus();
   }
